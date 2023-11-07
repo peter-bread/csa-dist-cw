@@ -28,19 +28,6 @@ func distributor(p Params, c distributorChannels) {
 	client, _ := rpc.Dial("tcp", *server)
 	defer client.Close()
 
-	// defined request
-	request := stubs.Request{
-		Params: stubs.GolParams{
-			Turns:       p.Turns,
-			Threads:     p.Threads,
-			ImageWidth:  p.ImageWidth,
-			ImageHeight: p.ImageHeight,
-		},
-	}
-
-	// created space for a response
-	response := new(stubs.Response)
-
 	filename := fmt.Sprintf("%vx%v", p.ImageWidth, p.ImageHeight)
 	c.ioCommand <- ioInput
 	c.ioFilename <- filename
@@ -57,7 +44,22 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
+	// defined request
+	request := stubs.Request{
+		Params: stubs.GolParams{
+			Turns:       p.Turns,
+			Threads:     p.Threads,
+			ImageWidth:  p.ImageWidth,
+			ImageHeight: p.ImageHeight,
+		},
+		World: world,
+	}
+
+	// created space for a response
+	response := new(stubs.Response)
+
 	client.Call(stubs.RunTurns, request, response)
+	fmt.Println("hello")
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	alive := calculateAliveCells(p, response.World)

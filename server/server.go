@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -11,6 +12,7 @@ import (
 
 /** Super-Secret `reversing a string' method we can't allow clients to see. **/
 func RunTurns(p stubs.GolParams, world [][]byte) [][]byte {
+	fmt.Println("heyy")
 
 	turn := 0
 	for ; turn < p.Turns; turn++ {
@@ -25,8 +27,12 @@ type GolOperations struct {
 }
 
 func (g *GolOperations) ProcessTurns(req stubs.Request, res *stubs.Response) (err error) {
+	fmt.Println("called")
+
 	res.World = RunTurns(req.Params, req.World)
 	// returning by altering value of res at the pointer
+	fmt.Println("returned")
+
 	return nil
 }
 
@@ -35,8 +41,10 @@ func main() {
 	flag.Parse()
 	// part of the req string implementation
 	rand.Seed(time.Now().UnixNano())
+	fmt.Print("HEllo")
 	// registering our service
 	rpc.Register(&GolOperations{})
+	fmt.Println("he223llo")
 
 	// create a network listener
 	listener, _ := net.Listen("tcp", ":"+*pAddr)
