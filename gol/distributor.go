@@ -57,9 +57,10 @@ func distributor(p Params, c distributorChannels) {
 
 	// created space for a response
 	response := new(stubs.Response)
+	fmt.Println("here!")
 
 	client.Call(stubs.RunTurns, request, response)
-	fmt.Println("hello")
+	fmt.Println("makes it!")
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	alive := calculateAliveCells(p, response.World)
@@ -76,7 +77,6 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
-	//TODO: connect to the RPC server and send the request(s)
 }
 
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
