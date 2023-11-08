@@ -1,8 +1,8 @@
 package gol
 
 import (
-	//	"net/rpc"
 	"flag"
+	"log"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -19,13 +19,28 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+func makeCall(client *rpc.Client, world [][]byte, p Params) {
+	// defined request
+	request := stubs.Request{
+		Turns:  p.Turns,
+		Height: p.ImageHeight,
+		Width:  p.ImageWidth,
+		World:  world,
+	}
+	response := new(stubs.Response)
+	client.Call(stubs.RunTurns, request, response)
+	fmt.Println(world)
+}
+
 func distributor(p Params, c distributorChannels) {
 	server := flag.String("server", "127.0.0.1:8030", "IP:port string to connect to as server")
 	flag.Parse()
 	fmt.Println("Server: ", *server)
-	// build an rpc client that mirrors the rpc server on the other side
 	// dial server address that has been passed
-	client, _ := rpc.Dial("tcp", *server)
+	client, err := rpc.Dial("tcp", *server)
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
 	defer client.Close()
 
 	filename := fmt.Sprintf("%vx%v", p.ImageWidth, p.ImageHeight)
@@ -44,26 +59,12 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	// defined request
-	request := stubs.Request{
-		Params: stubs.GolParams{
-			Turns:       p.Turns,
-			Threads:     p.Threads,
-			ImageWidth:  p.ImageWidth,
-			ImageHeight: p.ImageHeight,
-		},
-		World: world,
-	}
+	fmt.Println(world)
 
-	// created space for a response
-	response := new(stubs.Response)
-	fmt.Println("here!")
-
-	client.Call(stubs.RunTurns, request, response)
-	fmt.Println("makes it!")
+	makeCall(client, world, p)
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
-	alive := calculateAliveCells(p, response.World)
+	alive := calculateAliveCells(p, world)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: p.Turns,
 		Alive:          alive,
