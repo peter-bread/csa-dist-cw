@@ -3,6 +3,7 @@ package gol
 import (
 	"log"
 	"net/rpc"
+	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 
@@ -32,6 +33,19 @@ func makeCall(client *rpc.Client, world [][]byte, p Params) [][]byte {
 	return response.World
 }
 
+func makeTickerGo(client *rpc.Client, ticker *time.Ticker, world [][]byte, p Params) (int, int) {
+	request := stubs.TickerRequest{
+		TickerChan: ticker.C,
+		Height:     p.ImageHeight,
+		Width:      p.ImageWidth,
+		World:      world,
+	}
+	response := new(stubs.TickerResponse)
+	client.Call(stubs.ReturnAlive, request, response)
+
+	return response.CompletedTurns, response.CellsCount
+}
+
 func distributor(p Params, c distributorChannels) {
 	server := "127.0.0.1:8030"
 	fmt.Println("Server: ", server)
@@ -57,10 +71,27 @@ func distributor(p Params, c distributorChannels) {
 			world[i][j] = <-c.ioInput
 		}
 	}
-
+	finished := false
 	finalWorld := makeCall(client, world, p)
+	fmt.Println("heyy")
+	finished = true
 
-	// TODO: Report the final state using FinalTurnCompleteEvent.
+	var completedTurns, cellCount int
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		for {
+			if finished {
+				break
+			} else {
+				fmt.Print("hi")
+				completedTurns, cellCount = makeTickerGo(client, ticker, world, p)
+				c.events <- AliveCellsCount{
+					CompletedTurns: completedTurns,
+					CellsCount:     cellCount,
+				}
+			}
+		}
+	}()
 	alive := calculateAliveCells(p, finalWorld)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: p.Turns,

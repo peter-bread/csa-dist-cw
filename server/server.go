@@ -1,26 +1,56 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"net/rpc"
+	"sync"
+	"time"
 	"uk.ac.bris.cs/gameoflife/stubs"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
-func RunTurns(turns, height, width int, world [][]byte) [][]byte {
-	turn := 0
+var (
+	world  [][]byte
+	height int
+	width  int
+	turn   int
+	mutex  sync.Mutex
+)
+
+func RunTurns(turns int) [][]byte {
 	for ; turn < turns; turn++ {
+		mutex.Lock()
 		world = calculateNextState(height, width, world)
+		mutex.Unlock()
 	}
 
 	return world
+}
+
+func ReturnAlive(tickerChan <-chan time.Time) (int, int) {
+	select {
+	case <-tickerChan:
+		mutex.Lock()
+		aliveCount := len(calculateAliveCells(height, width, world))
+		mutex.Unlock()
+		return turn, aliveCount
+	}
 }
 
 type GolOperations struct {
 }
 
 func (g *GolOperations) ProcessTurns(req stubs.Request, res *stubs.Response) (err error) {
-	res.World = RunTurns(req.Turns, req.Height, req.Width, req.World)
+	world = req.World
+	height = req.Height
+	width = req.Width
+	turn = 0
+	res.World = RunTurns(req.Turns)
+	return
+}
+
+func (g *GolOperations) TickerInstant(req stubs.TickerRequest, res *stubs.TickerResponse) (err error) {
+	res.CompletedTurns, res.CellsCount = ReturnAlive(req.TickerChan)
 	return
 }
 
@@ -85,11 +115,14 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 	return newWorld
 }
 
-func print2DArray(arr [][]byte) {
-	for i := 0; i < len(arr); i++ {
-		for j := 0; j < len(arr[i]); j++ {
-			fmt.Printf("%d\t", arr[i][j])
+func calculateAliveCells(height, width int, world [][]byte) []util.Cell {
+	aliveCells := make([]util.Cell, 0, height*width)
+	for rowI, row := range world {
+		for colI, cellVal := range row {
+			if cellVal == 255 {
+				aliveCells = append(aliveCells, util.Cell{X: colI, Y: rowI})
+			}
 		}
-		fmt.Println()
 	}
+	return aliveCells
 }
