@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"flag"
 	"log"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -29,15 +28,13 @@ func makeCall(client *rpc.Client, world [][]byte, p Params) {
 	}
 	response := new(stubs.Response)
 	client.Call(stubs.RunTurns, request, response)
-	fmt.Println(world)
 }
 
 func distributor(p Params, c distributorChannels) {
-	server := flag.String("server", "127.0.0.1:8030", "IP:port string to connect to as server")
-	flag.Parse()
-	fmt.Println("Server: ", *server)
+	server := "127.0.0.1:8030"
+	fmt.Println("Server: ", server)
 	// dial server address that has been passed
-	client, err := rpc.Dial("tcp", *server)
+	client, err := rpc.Dial("tcp", server)
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}
@@ -58,8 +55,6 @@ func distributor(p Params, c distributorChannels) {
 			world[i][j] = <-c.ioInput
 		}
 	}
-
-	fmt.Println(world)
 
 	makeCall(client, world, p)
 

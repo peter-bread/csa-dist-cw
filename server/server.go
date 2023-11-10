@@ -1,8 +1,6 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -11,7 +9,6 @@ import (
 func RunTurns(turns, height, width int, world [][]byte) [][]byte {
 	turn := 0
 	for ; turn < turns; turn++ {
-		fmt.Println(turn)
 		world = calculateNextState(height, width, world)
 	}
 
@@ -27,13 +24,12 @@ func (g *GolOperations) ProcessTurns(req stubs.Request, res *stubs.Response) (er
 }
 
 func main() {
-	pAddr := flag.String("port", "8030", "Port to listen on")
-	flag.Parse()
+	pAddr := "8030"
 	// registering our service
 	rpc.Register(&GolOperations{})
 
 	// create a network listener
-	listener, _ := net.Listen("tcp", ":"+*pAddr)
+	listener, _ := net.Listen("tcp", ":"+pAddr)
 	defer listener.Close()
 
 	// want service to start accepting communications
