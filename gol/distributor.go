@@ -72,19 +72,24 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 	finished := false
-	finalWorld := makeCall(client, world, p)
-	fmt.Println("heyy")
-	finished = true
+	var finalWorld [][]byte
+	go func() {
+		finalWorld = makeCall(client, world, p)
+		finished = true
+	}()
+
+	ticker := time.NewTicker(2 * time.Second)
 
 	var completedTurns, cellCount int
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
 		for {
 			if finished {
+				fmt.Println("wrong")
 				break
 			} else {
 				fmt.Print("hi")
 				completedTurns, cellCount = makeTickerGo(client, ticker, world, p)
+				fmt.Println("sending")
 				c.events <- AliveCellsCount{
 					CompletedTurns: completedTurns,
 					CellsCount:     cellCount,
@@ -92,20 +97,28 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}
 	}()
-	alive := calculateAliveCells(p, finalWorld)
-	c.events <- FinalTurnComplete{
-		CompletedTurns: p.Turns,
-		Alive:          alive,
+
+	for {
+		if finished {
+			ticker.Stop()
+			alive := calculateAliveCells(p, finalWorld)
+			c.events <- FinalTurnComplete{
+				CompletedTurns: p.Turns,
+				Alive:          alive,
+			}
+
+			// Make sure that the Io has finished any output before exiting.
+			c.ioCommand <- ioCheckIdle
+			<-c.ioIdle
+
+			c.events <- StateChange{p.Turns, Quitting}
+			break
+		}
 	}
-
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	c.events <- StateChange{p.Turns, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
+
 }
 
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {

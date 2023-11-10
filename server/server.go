@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -23,6 +24,7 @@ func RunTurns(turns int) [][]byte {
 		world = calculateNextState(height, width, world)
 		mutex.Unlock()
 	}
+	fmt.Println("works")
 
 	return world
 }
@@ -31,6 +33,7 @@ func ReturnAlive(tickerChan <-chan time.Time) (int, int) {
 	select {
 	case <-tickerChan:
 		mutex.Lock()
+		fmt.Println("accessed")
 		aliveCount := len(calculateAliveCells(height, width, world))
 		mutex.Unlock()
 		return turn, aliveCount
