@@ -18,7 +18,7 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func makeCall(client *rpc.Client, world [][]byte, p Params) {
+func makeCall(client *rpc.Client, world [][]byte, p Params) [][]byte {
 	// defined request
 	request := stubs.Request{
 		Turns:  p.Turns,
@@ -28,6 +28,8 @@ func makeCall(client *rpc.Client, world [][]byte, p Params) {
 	}
 	response := new(stubs.Response)
 	client.Call(stubs.RunTurns, request, response)
+
+	return response.World
 }
 
 func distributor(p Params, c distributorChannels) {
@@ -56,10 +58,10 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	makeCall(client, world, p)
+	finalWorld := makeCall(client, world, p)
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
-	alive := calculateAliveCells(p, world)
+	alive := calculateAliveCells(p, finalWorld)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: p.Turns,
 		Alive:          alive,
@@ -85,4 +87,13 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		}
 	}
 	return aliveCells
+}
+
+func print2DArray(arr [][]byte) {
+	for i := 0; i < len(arr); i++ {
+		for j := 0; j < len(arr[i]); j++ {
+			fmt.Printf("%d\t", arr[i][j])
+		}
+		fmt.Println()
+	}
 }

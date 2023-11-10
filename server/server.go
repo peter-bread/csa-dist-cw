@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/rpc"
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -59,8 +60,8 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 					if i != 0 || j != 0 {
 
 						// Calculate neighbour coordinates with wrapping
-						neighbourRow := (rowI + i + height) % height
-						neighbourCol := (colI + j + width) % width
+						neighbourRow := (rowI + i + height) % width
+						neighbourCol := (colI + j + height) % width
 
 						// Check if the wrapped neighbour is alive
 						if world[neighbourRow][neighbourCol] == 255 {
@@ -82,4 +83,13 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 		}
 	}
 	return newWorld
+}
+
+func print2DArray(arr [][]byte) {
+	for i := 0; i < len(arr); i++ {
+		for j := 0; j < len(arr[i]); j++ {
+			fmt.Printf("%d\t", arr[i][j])
+		}
+		fmt.Println()
+	}
 }
