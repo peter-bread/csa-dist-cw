@@ -1,6 +1,6 @@
 package stubs
 
-var RunTurns = "GolOperations.ProcessTurns"
+var RunGame = "GolOperations.RunGame"
 
 type RunGameResponse struct {
 	World [][]byte

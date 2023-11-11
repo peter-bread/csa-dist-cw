@@ -20,17 +20,17 @@ type distributorChannels struct {
 }
 
 func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- [][]byte) {
-	// defined request
-	request := stubs.RunGameRequest{
+	// defined req
+	req := stubs.RunGameRequest{
 		Turns:  p.Turns,
 		Height: p.ImageHeight,
 		Width:  p.ImageWidth,
 		World:  world,
 	}
-	response := new(stubs.RunGameResponse)
-	client.Call(stubs.RunTurns, request, response)
+	res := new(stubs.RunGameResponse)
+	client.Call(stubs.RunGame, req, res)
 
-	resultChan <- response.World
+	resultChan <- res.World
 }
 
 func distributor(p Params, c distributorChannels) {

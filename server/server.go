@@ -13,14 +13,13 @@ func RunTurns(turns, height, width int, world [][]byte) [][]byte {
 	for ; turn < turns; turn++ {
 		world = calculateNextState(height, width, world)
 	}
-
 	return world
 }
 
 type GolOperations struct {
 }
 
-func (g *GolOperations) ProcessTurns(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
+func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
 	res.World = RunTurns(req.Turns, req.Height, req.Width, req.World)
 	return
 }
