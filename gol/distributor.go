@@ -3,6 +3,7 @@ package gol
 import (
 	"log"
 	"net/rpc"
+	"time"
 
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -19,7 +20,7 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- [][]byte) {
+func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- stubs.RunGameResponse) {
 	// defined req
 	req := stubs.RunGameRequest{
 		Turns:  p.Turns,
@@ -30,7 +31,14 @@ func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan ch
 	res := new(stubs.RunGameResponse)
 	client.Call(stubs.RunGame, req, res)
 
-	resultChan <- res.World
+	resultChan <- *res
+}
+
+func makeAliveCellsCountCall(client *rpc.Client, resultChan chan<- stubs.AliveCellsCountResponse) {
+	req := stubs.AliveCellsCountRequest{}
+	res := new(stubs.AliveCellsCountResponse)
+	client.Call(stubs.AliveCellsCount, req, res)
+	resultChan <- *res
 }
 
 func distributor(p Params, c distributorChannels) {
@@ -59,13 +67,31 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	resultChannel := make(chan [][]byte)
+	ticker := time.NewTicker(2 * time.Second)
 
-	go makeRunGameCall(client, world, p, resultChannel)
+	runGameResultChannel := make(chan stubs.RunGameResponse)
+	go makeRunGameCall(client, world, p, runGameResultChannel)
 
-	finalWorld := <-resultChannel
+	aliveCellsCountResultChannel := make(chan stubs.AliveCellsCountResponse)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				go makeAliveCellsCountCall(client, aliveCellsCountResultChannel)
+				result := <-aliveCellsCountResultChannel
+				c.events <- AliveCellsCount{
+					CompletedTurns: result.CompletedTurns,
+					CellsCount:     result.CellsCount,
+				}
+			}
+		}
+	}()
 
-	// TODO: Report the final state using FinalTurnCompleteEvent.
+	finalWorld := (<-runGameResultChannel).World
+	ticker.Stop()
+
+	// Report the final state using FinalTurnCompleteEvent.
+	// ? Should the final alive cells be calculated in the server??? does this count as GOL logic???
 	alive := calculateAliveCells(p, finalWorld)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: p.Turns,
@@ -92,13 +118,4 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		}
 	}
 	return aliveCells
-}
-
-func print2DArray(arr [][]byte) {
-	for i := 0; i < len(arr); i++ {
-		for j := 0; j < len(arr[i]); j++ {
-			fmt.Printf("%d\t", arr[i][j])
-		}
-		fmt.Println()
-	}
 }

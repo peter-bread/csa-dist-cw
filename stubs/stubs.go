@@ -1,6 +1,9 @@
 package stubs
 
-var RunGame = "GolOperations.RunGame"
+var (
+	RunGame         = "GolOperations.RunGame"
+	AliveCellsCount = "GolOperations.AliveCellsCount"
+)
 
 type RunGameResponse struct {
 	World [][]byte
@@ -13,8 +16,12 @@ type RunGameRequest struct {
 	World  [][]byte
 }
 
-type AliveCellCountResponse struct {
+type AliveCellsCountResponse struct {
+	CompletedTurns int
+	CellsCount     int
 }
 
-type AliveCellCountRequest struct {
+type AliveCellsCountRequest struct {
+	Height int
+	Width  int
 }

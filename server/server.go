@@ -1,26 +1,52 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"net/rpc"
+	"sync"
 
 	"uk.ac.bris.cs/gameoflife/stubs"
+	"uk.ac.bris.cs/gameoflife/util"
 )
 
-func RunTurns(turns, height, width int, world [][]byte) [][]byte {
-	turn := 0
+var (
+	world  [][]byte
+	height int
+	width  int
+	turn   int
+	mutex  sync.Mutex
+)
+
+func RunTurns(turns int, resultChan chan<- [][]byte) {
+	turn = 0
 	for ; turn < turns; turn++ {
-		world = calculateNextState(height, width, world)
+		newWorld := calculateNextState()
+		mutex.Lock()
+		copy(world, newWorld)
+		mutex.Unlock()
 	}
-	return world
+	resultChan <- world
 }
 
 type GolOperations struct {
 }
 
 func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
-	res.World = RunTurns(req.Turns, req.Height, req.Width, req.World)
+
+	// global variables
+	world = req.World
+	height = req.Height // should never change
+	width = req.Width   // should never change
+
+	resultChan := make(chan [][]byte)
+	go RunTurns(req.Turns, resultChan)
+	res.World = <-resultChan
+	return
+}
+
+func (g *GolOperations) AliveCellsCount(req stubs.AliveCellsCountRequest, res *stubs.AliveCellsCountResponse) (err error) {
+	res.CompletedTurns = turn
+	res.CellsCount = len(calculateAliveCells(req.Height, req.Width))
 	return
 }
 
@@ -38,7 +64,7 @@ func main() {
 	rpc.Accept(listener)
 }
 
-func calculateNextState(height, width int, world [][]byte) [][]byte {
+func calculateNextState() [][]byte {
 	//   world[ row ][ col ]
 	//      up/down    left/right
 
@@ -60,8 +86,8 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 					if i != 0 || j != 0 {
 
 						// Calculate neighbour coordinates with wrapping
-						neighbourRow := (rowI + i + height) % width
-						neighbourCol := (colI + j + height) % width
+						neighbourRow := (rowI + i + height) % height
+						neighbourCol := (colI + j + width) % width
 
 						// Check if the wrapped neighbour is alive
 						if world[neighbourRow][neighbourCol] == 255 {
@@ -85,11 +111,16 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 	return newWorld
 }
 
-func print2DArray(arr [][]byte) {
-	for i := 0; i < len(arr); i++ {
-		for j := 0; j < len(arr[i]); j++ {
-			fmt.Printf("%d\t", arr[i][j])
+func calculateAliveCells(height, width int) []util.Cell {
+	mutex.Lock()
+	defer mutex.Unlock()
+	aliveCells := make([]util.Cell, 0, height*width)
+	for rowI, row := range world {
+		for colI, cellVal := range row {
+			if cellVal == 255 {
+				aliveCells = append(aliveCells, util.Cell{X: colI, Y: rowI})
+			}
 		}
-		fmt.Println()
 	}
+	return aliveCells
 }
