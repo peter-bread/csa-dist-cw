@@ -2,13 +2,19 @@ package stubs
 
 var RunTurns = "GolOperations.ProcessTurns"
 
-type Response struct {
+type RunGameResponse struct {
 	World [][]byte
 }
 
-type Request struct {
+type RunGameRequest struct {
 	Turns  int
 	Height int
 	Width  int
 	World  [][]byte
+}
+
+type AliveCellCountResponse struct {
+}
+
+type AliveCellCountRequest struct {
 }

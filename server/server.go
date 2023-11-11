@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
@@ -19,7 +20,7 @@ func RunTurns(turns, height, width int, world [][]byte) [][]byte {
 type GolOperations struct {
 }
 
-func (g *GolOperations) ProcessTurns(req stubs.Request, res *stubs.Response) (err error) {
+func (g *GolOperations) ProcessTurns(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
 	res.World = RunTurns(req.Turns, req.Height, req.Width, req.World)
 	return
 }

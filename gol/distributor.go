@@ -19,15 +19,15 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func makeCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- [][]byte) {
+func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- [][]byte) {
 	// defined request
-	request := stubs.Request{
+	request := stubs.RunGameRequest{
 		Turns:  p.Turns,
 		Height: p.ImageHeight,
 		Width:  p.ImageWidth,
 		World:  world,
 	}
-	response := new(stubs.Response)
+	response := new(stubs.RunGameResponse)
 	client.Call(stubs.RunTurns, request, response)
 
 	resultChan <- response.World
@@ -61,7 +61,7 @@ func distributor(p Params, c distributorChannels) {
 
 	resultChannel := make(chan [][]byte)
 
-	go makeCall(client, world, p, resultChannel)
+	go makeRunGameCall(client, world, p, resultChannel)
 
 	finalWorld := <-resultChannel
 
