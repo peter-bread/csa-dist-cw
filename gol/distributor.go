@@ -3,6 +3,7 @@ package gol
 import (
 	"log"
 	"net/rpc"
+
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 
@@ -18,7 +19,7 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func makeCall(client *rpc.Client, world [][]byte, p Params) [][]byte {
+func makeCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- [][]byte) {
 	// defined request
 	request := stubs.Request{
 		Turns:  p.Turns,
@@ -29,7 +30,7 @@ func makeCall(client *rpc.Client, world [][]byte, p Params) [][]byte {
 	response := new(stubs.Response)
 	client.Call(stubs.RunTurns, request, response)
 
-	return response.World
+	resultChan <- response.World
 }
 
 func distributor(p Params, c distributorChannels) {
@@ -58,7 +59,11 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
-	finalWorld := makeCall(client, world, p)
+	resultChannel := make(chan [][]byte)
+
+	go makeCall(client, world, p, resultChannel)
+
+	finalWorld := <-resultChannel
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	alive := calculateAliveCells(p, finalWorld)
