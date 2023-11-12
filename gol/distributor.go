@@ -98,6 +98,8 @@ func distributor(p Params, c distributorChannels) {
 		Alive:          alive,
 	}
 
+	generatePGM(p, c, finalWorld)
+
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
@@ -108,6 +110,7 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
+// ? see query above
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	aliveCells := make([]util.Cell, 0, p.ImageHeight*p.ImageWidth)
 	for rowI, row := range world {
@@ -118,4 +121,18 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		}
 	}
 	return aliveCells
+}
+
+func generatePGM(p Params, c distributorChannels, world [][]byte) {
+	// after all turns send state of board to be outputted as a .pgm image
+
+	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
+	c.ioCommand <- ioOutput
+	c.ioFilename <- filename
+
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
+		}
+	}
 }
