@@ -55,7 +55,12 @@ func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.Scree
 	mutex.Lock()
 	defer mutex.Unlock()
 	print2DArray(res.World)
-	copy(res.World, world)
+	newWorld := make([][]byte, height)
+	for i := 0; i < height; i++ {
+		newWorld[i] = make([]byte, width)
+	}
+	copy(newWorld, world)
+	res.World = newWorld
 	return
 }
 
