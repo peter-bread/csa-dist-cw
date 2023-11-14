@@ -49,17 +49,24 @@ func makeScreenshotCall(client *rpc.Client, resultChan chan<- stubs.ScreenshotRe
 	resultChan <- *res
 }
 
-func quitProgram(client *rpc.Client, resultChan chan<- stubs.QuitResponse) {
+func makeQuitCall(client *rpc.Client, resultChan chan<- stubs.QuitResponse) {
 	req := stubs.QuitRequest{}
 	res := new(stubs.QuitResponse)
 	client.Call(stubs.Quit, req, res)
 	resultChan <- *res
 }
 
-func shutdown(client *rpc.Client, resultChan chan<- stubs.CloseServerResponse) {
+func makeCloseServerCall(client *rpc.Client, resultChan chan<- stubs.CloseServerResponse) {
 	req := stubs.CloseServerRequest{}
 	res := new(stubs.CloseServerResponse)
 	client.Call(stubs.Shutdown, req, res)
+	resultChan <- *res
+}
+
+func makePauseCall(client *rpc.Client, resultChan chan<- stubs.PauseResponse) {
+	req := stubs.PauseRequest{}
+	res := new(stubs.PauseResponse)
+	client.Call(stubs.Pause, req, res)
 	resultChan <- *res
 }
 
@@ -125,28 +132,29 @@ func distributor(p Params, c distributorChannels) {
 				case 's':
 					go makeScreenshotCall(client, pgmResultChannel)
 					generatePGM(p, c, (<-pgmResultChannel).World)
-					// FIXME index out of range [0] with length 0
-					// ! response contains an empty world
 				case 'q':
 					quitChannel := make(chan stubs.QuitResponse)
-					go quitProgram(client, quitChannel)
+					go makeQuitCall(client, quitChannel)
 					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
 					c.ioCommand <- ioCheckIdle
 					<-c.ioIdle
 					close(c.events)
 					break keysLoop
 				case 'k':
+					closeServer := make(chan stubs.CloseServerResponse)
+					go makeCloseServerCall(client, closeServer)
+					fmt.Println("hello")
 					quitChannel := make(chan stubs.QuitResponse)
-					go quitProgram(client, quitChannel)
+					go makeQuitCall(client, quitChannel)
 					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
 					c.ioCommand <- ioCheckIdle
 					<-c.ioIdle
 					close(c.events)
-					closeServer := make(chan stubs.CloseServerResponse)
-					go shutdown(client, closeServer)
 					break keysLoop
 				case 'p':
-
+					pauseChan := make(chan stubs.PauseResponse)
+					go makePauseCall(client, pauseChan)
+					fmt.Printf("Current Turn: %d\n", (<-pauseChan).Turn)
 				}
 			}
 		}

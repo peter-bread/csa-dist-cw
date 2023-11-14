@@ -11,12 +11,14 @@ import (
 )
 
 var (
-	world        [][]byte
-	height       int
-	width        int
-	turn         int
-	mutex        sync.Mutex
-	shutdownChan chan bool
+	world           [][]byte
+	height          int
+	width           int
+	turn            int
+	mutex           sync.Mutex
+	closeServerChan chan bool
+	pauseChan       chan bool
+	paused          bool
 )
 
 func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err error) {
@@ -24,6 +26,20 @@ func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err 
 		select {
 		case <-shutdown:
 			return
+		case p := <-pauseChan:
+			switch p {
+			case p:
+			pausingloop:
+				for {
+					select {
+					case x := <-pauseChan:
+						switch x {
+						case !x:
+							break pausingloop
+						}
+					}
+				}
+			}
 		default:
 			turn = 0
 			for ; turn < turns; turn++ {
@@ -38,8 +54,7 @@ func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err 
 
 }
 
-type GolOperations struct {
-}
+type GolOperations struct{}
 
 func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
 
@@ -49,7 +64,7 @@ func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResp
 	width = req.Width   // should never change
 
 	resultChan := make(chan [][]byte)
-	go RunTurns(req.Turns, resultChan, shutdownChan)
+	go RunTurns(req.Turns, resultChan, closeServerChan)
 	res.World = <-resultChan
 	return
 }
@@ -78,13 +93,28 @@ func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (er
 	return
 }
 
-func (g *GolOperations) Shutdown(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
-	shutdownChan = make(chan bool, 1)
-	shutdownChan <- true
+func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
+	closeServerChan = make(chan bool, 2)
+	closeServerChan <- true
+	closeServerChan <- true
+	return
+}
+
+func (g *GolOperations) Pause(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
+	pauseChan = make(chan bool, 3)
+	if !paused {
+		paused = true
+		pauseChan <- true
+		res.Turn = turn
+	} else {
+		paused = false
+		pauseChan <- false
+	}
 	return
 }
 
 func main() {
+	paused = false
 	pAddr := "8030"
 	// registering our service
 	rpc.Register(&GolOperations{})
@@ -95,7 +125,15 @@ func main() {
 
 	// want service to start accepting communications
 	// this service will listen for communications from client trying to call that function
-	rpc.Accept(listener)
+	go rpc.Accept(listener)
+	// select {
+	// case <-shutdownChan:
+	// 	listener.Close()
+	// }
+
+	<-closeServerChan
+	fmt.Println("ee")
+	listener.Close()
 }
 
 func calculateNextState() [][]byte {
