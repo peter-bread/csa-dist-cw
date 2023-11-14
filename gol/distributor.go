@@ -18,6 +18,7 @@ type distributorChannels struct {
 	ioFilename chan<- string
 	ioOutput   chan<- uint8
 	ioInput    <-chan uint8
+	keyPresses <-chan rune
 }
 
 func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- stubs.RunGameResponse) {
@@ -38,6 +39,13 @@ func makeAliveCellsCountCall(client *rpc.Client, resultChan chan<- stubs.AliveCe
 	req := stubs.AliveCellsCountRequest{}
 	res := new(stubs.AliveCellsCountResponse)
 	client.Call(stubs.AliveCellsCount, req, res)
+	resultChan <- *res
+}
+
+func makeScreenshotCall(client *rpc.Client, resultChan chan<- stubs.ScreenshotResponse) {
+	req := stubs.ScreenshotRequest{}
+	res := new(stubs.ScreenshotResponse)
+	client.Call(stubs.Screenshot, req, res)
 	resultChan <- *res
 }
 
@@ -64,6 +72,7 @@ func distributor(p Params, c distributorChannels) {
 	for i := 0; i < p.ImageHeight; i++ {
 		for j := 0; j < p.ImageWidth; j++ {
 			world[i][j] = <-c.ioInput
+			// TODO: if cell is initially alive send CellFlipped event
 		}
 	}
 
@@ -82,6 +91,27 @@ func distributor(p Params, c distributorChannels) {
 				c.events <- AliveCellsCount{
 					CompletedTurns: result.CompletedTurns,
 					CellsCount:     result.CellsCount,
+				}
+			}
+		}
+	}()
+
+	go func() {
+		// keysLoop:
+		for {
+			select {
+			case key := <-c.keyPresses:
+				pgmResultChannel := make(chan stubs.ScreenshotResponse)
+				switch key {
+				case 's':
+					go makeScreenshotCall(client, pgmResultChannel)
+					generatePGM(p, c, (<-pgmResultChannel).World)
+					// FIXME index out of range [0] with length 0
+					// ! response contains an empty world
+				case 'q':
+
+				case 'p':
+
 				}
 			}
 		}
@@ -134,5 +164,14 @@ func generatePGM(p Params, c distributorChannels, world [][]byte) {
 		for x := 0; x < p.ImageWidth; x++ {
 			c.ioOutput <- world[y][x]
 		}
+	}
+}
+
+func print2DArray(arr [][]byte) {
+	for i := 0; i < len(arr); i++ {
+		for j := 0; j < len(arr[i]); j++ {
+			fmt.Printf("%d\t", arr[i][j])
+		}
+		fmt.Println()
 	}
 }

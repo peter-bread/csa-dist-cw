@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -47,6 +48,14 @@ func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResp
 func (g *GolOperations) AliveCellsCount(req stubs.AliveCellsCountRequest, res *stubs.AliveCellsCountResponse) (err error) {
 	res.CompletedTurns = turn
 	res.CellsCount = len(calculateAliveCells(req.Height, req.Width))
+	return
+}
+
+func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.ScreenshotResponse) (err error) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	print2DArray(res.World)
+	copy(res.World, world)
 	return
 }
 
@@ -123,4 +132,13 @@ func calculateAliveCells(height, width int) []util.Cell {
 		}
 	}
 	return aliveCells
+}
+
+func print2DArray(arr [][]byte) {
+	for i := 0; i < len(arr); i++ {
+		for j := 0; j < len(arr[i]); j++ {
+			fmt.Printf("%d\t", arr[i][j])
+		}
+		fmt.Println()
+	}
 }
