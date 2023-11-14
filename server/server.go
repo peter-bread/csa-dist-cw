@@ -11,22 +11,31 @@ import (
 )
 
 var (
-	world  [][]byte
-	height int
-	width  int
-	turn   int
-	mutex  sync.Mutex
+	world        [][]byte
+	height       int
+	width        int
+	turn         int
+	mutex        sync.Mutex
+	shutdownChan chan bool
 )
 
-func RunTurns(turns int, resultChan chan<- [][]byte) {
-	turn = 0
-	for ; turn < turns; turn++ {
-		newWorld := calculateNextState()
-		mutex.Lock()
-		copy(world, newWorld)
-		mutex.Unlock()
+func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err error) {
+	for {
+		select {
+		case <-shutdown:
+			return
+		default:
+			turn = 0
+			for ; turn < turns; turn++ {
+				newWorld := calculateNextState()
+				mutex.Lock()
+				copy(world, newWorld)
+				mutex.Unlock()
+			}
+			resultChan <- world
+		}
 	}
-	resultChan <- world
+
 }
 
 type GolOperations struct {
@@ -40,7 +49,7 @@ func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResp
 	width = req.Width   // should never change
 
 	resultChan := make(chan [][]byte)
-	go RunTurns(req.Turns, resultChan)
+	go RunTurns(req.Turns, resultChan, shutdownChan)
 	res.World = <-resultChan
 	return
 }
@@ -61,6 +70,17 @@ func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.Scree
 	}
 	copy(newWorld, world)
 	res.World = newWorld
+	return
+}
+
+func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error) {
+	res.Turn = turn
+	return
+}
+
+func (g *GolOperations) Shutdown(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
+	shutdownChan = make(chan bool, 1)
+	shutdownChan <- true
 	return
 }
 

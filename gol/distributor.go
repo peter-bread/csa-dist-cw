@@ -49,6 +49,20 @@ func makeScreenshotCall(client *rpc.Client, resultChan chan<- stubs.ScreenshotRe
 	resultChan <- *res
 }
 
+func quitProgram(client *rpc.Client, resultChan chan<- stubs.QuitResponse) {
+	req := stubs.QuitRequest{}
+	res := new(stubs.QuitResponse)
+	client.Call(stubs.Quit, req, res)
+	resultChan <- *res
+}
+
+func shutdown(client *rpc.Client, resultChan chan<- stubs.CloseServerResponse) {
+	req := stubs.CloseServerRequest{}
+	res := new(stubs.CloseServerResponse)
+	client.Call(stubs.Shutdown, req, res)
+	resultChan <- *res
+}
+
 func distributor(p Params, c distributorChannels) {
 	server := "127.0.0.1:8030"
 	fmt.Println("Server: ", server)
@@ -72,7 +86,12 @@ func distributor(p Params, c distributorChannels) {
 	for i := 0; i < p.ImageHeight; i++ {
 		for j := 0; j < p.ImageWidth; j++ {
 			world[i][j] = <-c.ioInput
-			// TODO: if cell is initially alive send CellFlipped event
+			if world[i][j] == 255 {
+				c.events <- CellFlipped{
+					CompletedTurns: 0,
+					Cell:           util.Cell{X: j, Y: i},
+				}
+			}
 		}
 	}
 
@@ -97,7 +116,7 @@ func distributor(p Params, c distributorChannels) {
 	}()
 
 	go func() {
-		// keysLoop:
+	keysLoop:
 		for {
 			select {
 			case key := <-c.keyPresses:
@@ -109,7 +128,23 @@ func distributor(p Params, c distributorChannels) {
 					// FIXME index out of range [0] with length 0
 					// ! response contains an empty world
 				case 'q':
-
+					quitChannel := make(chan stubs.QuitResponse)
+					go quitProgram(client, quitChannel)
+					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
+					c.ioCommand <- ioCheckIdle
+					<-c.ioIdle
+					close(c.events)
+					break keysLoop
+				case 'k':
+					quitChannel := make(chan stubs.QuitResponse)
+					go quitProgram(client, quitChannel)
+					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
+					c.ioCommand <- ioCheckIdle
+					<-c.ioIdle
+					close(c.events)
+					closeServer := make(chan stubs.CloseServerResponse)
+					go shutdown(client, closeServer)
+					break keysLoop
 				case 'p':
 
 				}

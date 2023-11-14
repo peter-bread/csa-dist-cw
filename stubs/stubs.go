@@ -4,6 +4,8 @@ var (
 	RunGame         = "GolOperations.RunGame"
 	AliveCellsCount = "GolOperations.AliveCellsCount"
 	Screenshot      = "GolOperations.Screenshot"
+	Quit            = "GolOperations.Quit"
+	Shutdown        = "GolOperations.Shutdown"
 )
 
 type RunGameRequest struct {
@@ -32,3 +34,13 @@ type ScreenshotRequest struct{}
 type ScreenshotResponse struct {
 	World [][]byte
 }
+
+type QuitRequest struct{}
+
+type QuitResponse struct {
+	Turn int
+}
+
+type CloseServerResponse struct{}
+
+type CloseServerRequest struct{}
