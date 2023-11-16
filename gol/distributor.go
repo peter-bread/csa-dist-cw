@@ -90,13 +90,13 @@ func distributor(p Params, c distributorChannels) {
 		world[i] = make([]byte, p.ImageWidth)
 	}
 
-	for i := 0; i < p.ImageHeight; i++ {
-		for j := 0; j < p.ImageWidth; j++ {
-			world[i][j] = <-c.ioInput
-			if world[i][j] == 255 {
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			world[y][x] = <-c.ioInput
+			if world[y][x] == 255 {
 				c.events <- CellFlipped{
 					CompletedTurns: 0,
-					Cell:           util.Cell{X: j, Y: i},
+					Cell:           util.Cell{X: x, Y: y},
 				}
 			}
 		}
