@@ -152,7 +152,6 @@ func distributor(p Params, c distributorChannels) {
 				case 'k':
 					closeServer := make(chan stubs.CloseServerResponse)
 					go makeCloseServerCall(client, closeServer)
-					fmt.Println("hello")
 					quitChannel := make(chan stubs.QuitResponse)
 					go makeQuitCall(client, quitChannel)
 					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
@@ -162,22 +161,16 @@ func distributor(p Params, c distributorChannels) {
 					break keysLoop
 				case 'p':
 					paused = !paused
-					fmt.Println("hello")
-
 					// if paused, send pause request, else send restart request
 					if paused {
 						pauseChan := make(chan stubs.PauseResponse)
 						go makePauseCall(client, pauseChan)
 						ticker.Stop()
 						c.events <- StateChange{(<-pauseChan).Turn, Paused}
-						fmt.Println("heyy")
-
 					} else {
-						fmt.Println("gecko")
 						restartChan := make(chan stubs.RestartResponse)
 						go makeRestartCall(client, restartChan)
 						ticker.Reset(2 * time.Second)
-						fmt.Println("lizard")
 						c.events <- StateChange{(<-restartChan).Turn, Executing}
 
 					}

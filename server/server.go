@@ -28,8 +28,6 @@ func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err 
 			return
 			// to shut the server down, it needs to be a goroutine from the client as it wont respond since its shut down
 			// to shut the client down just do it in the client file.
-		case <-pausing:
-			// give pause the mutex lock to pause the world!!
 		default:
 			newWorld := calculateNextState()
 			mutex.Lock()
@@ -88,15 +86,13 @@ func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.Clo
 }
 
 func (g *GolOperations) Pause(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-	pausing = make(chan bool)
-	pausing <- true
+	mutex.Lock()
 	res.Turn = turn
 	return
 }
 
 func (g *GolOperations) Restart(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-	restarting = make(chan bool)
-	restarting <- true
+	mutex.Unlock()
 	res.Turn = turn
 	return
 }
