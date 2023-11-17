@@ -45,7 +45,10 @@ type QuitResponse struct {
 
 type CloseServerRequest struct{}
 
-type CloseServerResponse struct{}
+type CloseServerResponse struct {
+	Turn  int
+	World [][]byte
+}
 
 type PauseRequest struct{}
 

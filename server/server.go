@@ -16,18 +16,14 @@ var (
 	turn            int
 	mutex           sync.Mutex
 	closeServerChan chan bool
-	pausing         chan bool
-	restarting      chan bool
 )
 
-func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err error) {
+func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 	turn = 0
 	for ; turn < turns; turn++ {
 		select {
-		case <-shutdown:
+		case <-closeServerChan:
 			return
-			// to shut the server down, it needs to be a goroutine from the client as it wont respond since its shut down
-			// to shut the client down just do it in the client file.
 		default:
 			newWorld := calculateNextState()
 			mutex.Lock()
@@ -49,7 +45,7 @@ func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResp
 	width = req.Width   // should never change
 
 	resultChan := make(chan [][]byte)
-	go RunTurns(req.Turns, resultChan, closeServerChan)
+	go RunTurns(req.Turns, resultChan)
 	res.World = <-resultChan
 	return
 }
@@ -79,9 +75,10 @@ func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (er
 }
 
 func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
-	closeServerChan = make(chan bool, 2)
+	closeServerChan = make(chan bool)
 	closeServerChan <- true
-	closeServerChan <- true
+	res.World = world
+	res.Turn = turn
 	return
 }
 
@@ -104,18 +101,10 @@ func main() {
 
 	// create a network listener
 	listener, _ := net.Listen("tcp", ":"+pAddr)
-	defer listener.Close()
 
-	// want service to start accepting communications
-	// this service will listen for communications from client trying to call that function
+	// go routine to enable us to close once finished OR close until we want to shutdown
 	go rpc.Accept(listener)
-	// select {
-	// case <-shutdownChan:
-	// 	listener.Close()
-	// }
-
 	<-closeServerChan
-	fmt.Println("ee")
 	listener.Close()
 }
 

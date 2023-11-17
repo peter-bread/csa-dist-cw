@@ -144,19 +144,20 @@ func distributor(p Params, c distributorChannels) {
 				case 'q':
 					quitChannel := make(chan stubs.QuitResponse)
 					go makeQuitCall(client, quitChannel)
-					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
 					c.ioCommand <- ioCheckIdle
 					<-c.ioIdle
+					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
 					close(c.events)
 					break keysLoop
 				case 'k':
-					closeServer := make(chan stubs.CloseServerResponse)
-					go makeCloseServerCall(client, closeServer)
-					quitChannel := make(chan stubs.QuitResponse)
-					go makeQuitCall(client, quitChannel)
-					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
+					closeChan := make(chan stubs.CloseServerResponse)
+					go makeCloseServerCall(client, closeChan)
+					res := <-closeChan
+					ticker.Stop()
 					c.ioCommand <- ioCheckIdle
 					<-c.ioIdle
+					c.events <- StateChange{res.Turn, Quitting}
+					generatePGM(p, c, res.World)
 					close(c.events)
 					break keysLoop
 				case 'p':
