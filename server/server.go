@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
-
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -17,41 +16,29 @@ var (
 	turn            int
 	mutex           sync.Mutex
 	closeServerChan chan bool
-	pauseChan       chan bool
-	paused          bool
+	pausing         chan bool
+	restarting      chan bool
 )
 
 func RunTurns(turns int, resultChan chan<- [][]byte, shutdown <-chan bool) (err error) {
-	for {
+	turn = 0
+	for ; turn < turns; turn++ {
 		select {
 		case <-shutdown:
 			return
-		case p := <-pauseChan:
-			switch p {
-			case p:
-			pausingloop:
-				for {
-					select {
-					case x := <-pauseChan:
-						switch x {
-						case !x:
-							break pausingloop
-						}
-					}
-				}
-			}
+			// to shut the server down, it needs to be a goroutine from the client as it wont respond since its shut down
+			// to shut the client down just do it in the client file.
+		case <-pausing:
+			// give pause the mutex lock to pause the world!!
 		default:
-			turn = 0
-			for ; turn < turns; turn++ {
-				newWorld := calculateNextState()
-				mutex.Lock()
-				copy(world, newWorld)
-				mutex.Unlock()
-			}
-			resultChan <- world
+			newWorld := calculateNextState()
+			mutex.Lock()
+			copy(world, newWorld)
+			mutex.Unlock()
 		}
 	}
-
+	resultChan <- world
+	return
 }
 
 type GolOperations struct{}
@@ -101,20 +88,20 @@ func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.Clo
 }
 
 func (g *GolOperations) Pause(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-	pauseChan = make(chan bool, 3)
-	if !paused {
-		paused = true
-		pauseChan <- true
-		res.Turn = turn
-	} else {
-		paused = false
-		pauseChan <- false
-	}
+	pausing = make(chan bool)
+	pausing <- true
+	res.Turn = turn
+	return
+}
+
+func (g *GolOperations) Restart(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
+	restarting = make(chan bool)
+	restarting <- true
+	res.Turn = turn
 	return
 }
 
 func main() {
-	paused = false
 	pAddr := "8030"
 	// registering our service
 	rpc.Register(&GolOperations{})

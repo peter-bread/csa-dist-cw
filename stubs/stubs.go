@@ -7,6 +7,7 @@ var (
 	Quit            = "GolOperations.Quit"
 	Shutdown        = "GolOperations.CloseServer"
 	Pause           = "GolOperations.Pause"
+	Restart         = "GolOperations.Restart"
 )
 
 type RunGameRequest struct {
@@ -49,5 +50,11 @@ type CloseServerResponse struct{}
 type PauseRequest struct{}
 
 type PauseResponse struct {
+	Turn int
+}
+
+type RestartRequest struct{}
+
+type RestartResponse struct {
 	Turn int
 }

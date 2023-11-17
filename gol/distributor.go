@@ -70,6 +70,13 @@ func makePauseCall(client *rpc.Client, resultChan chan<- stubs.PauseResponse) {
 	resultChan <- *res
 }
 
+func makeRestartCall(client *rpc.Client, resultChan chan<- stubs.RestartResponse) {
+	req := stubs.RestartRequest{}
+	res := new(stubs.RestartResponse)
+	client.Call(stubs.Restart, req, res)
+	resultChan <- *res
+}
+
 func distributor(p Params, c distributorChannels) {
 	server := "127.0.0.1:8030"
 	fmt.Println("Server: ", server)
@@ -122,6 +129,8 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
+	paused := false
+
 	go func() {
 	keysLoop:
 		for {
@@ -152,9 +161,27 @@ func distributor(p Params, c distributorChannels) {
 					close(c.events)
 					break keysLoop
 				case 'p':
-					pauseChan := make(chan stubs.PauseResponse)
-					go makePauseCall(client, pauseChan)
-					fmt.Printf("Current Turn: %d\n", (<-pauseChan).Turn)
+					paused = !paused
+					fmt.Println("hello")
+
+					// if paused, send pause request, else send restart request
+					if paused {
+						pauseChan := make(chan stubs.PauseResponse)
+						go makePauseCall(client, pauseChan)
+						ticker.Stop()
+						c.events <- StateChange{(<-pauseChan).Turn, Paused}
+						fmt.Println("heyy")
+
+					} else {
+						fmt.Println("gecko")
+						restartChan := make(chan stubs.RestartResponse)
+						go makeRestartCall(client, restartChan)
+						ticker.Reset(2 * time.Second)
+						fmt.Println("lizard")
+						c.events <- StateChange{(<-restartChan).Turn, Executing}
+
+					}
+
 				}
 			}
 		}
