@@ -192,6 +192,7 @@ func distributor(p Params, c distributorChannels) {
 		Alive:          alive,
 	}
 
+	// print2DArray(finalWorld)
 	generatePGM(p, c, finalWorld)
 
 	// Make sure that the Io has finished any output before exiting.

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -15,15 +16,17 @@ var (
 	width           int
 	turn            int
 	mutex           sync.Mutex
-	closeServerChan chan bool
+	closeServerChan chan struct{}
+	stopTurnsChan   chan struct{}
 )
 
-func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
+func RunTurns(turns int, resultChan chan<- [][]byte, stopChan <-chan struct{}) (err error) {
 	turn = 0
 	for ; turn < turns; turn++ {
+		fmt.Println(turn)
 		select {
-		case <-closeServerChan:
-			return
+		case <-stopChan:
+			return // Terminate the goroutine if the stop signal is received
 		default:
 			newWorld := calculateNextState()
 			mutex.Lock()
@@ -40,18 +43,23 @@ type GolOperations struct{}
 func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
 
 	// global variables
+	mutex.Lock()
 	world = req.World
 	height = req.Height // should never change
 	width = req.Width   // should never change
+	mutex.Unlock()
 
 	resultChan := make(chan [][]byte)
-	go RunTurns(req.Turns, resultChan)
+	go RunTurns(req.Turns, resultChan, stopTurnsChan)
 	res.World = <-resultChan
+	close(stopTurnsChan)
 	return
 }
 
 func (g *GolOperations) AliveCellsCount(req stubs.AliveCellsCountRequest, res *stubs.AliveCellsCountResponse) (err error) {
+	mutex.Lock()
 	res.CompletedTurns = turn
+	mutex.Unlock()
 	res.CellsCount = len(calculateAliveCells(req.Height, req.Width))
 	return
 }
@@ -75,8 +83,7 @@ func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (er
 }
 
 func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
-	closeServerChan = make(chan bool)
-	closeServerChan <- true
+	closeServerChan <- struct{}{}
 	res.World = world
 	res.Turn = turn
 	return
@@ -96,17 +103,96 @@ func (g *GolOperations) Restart(req stubs.PauseRequest, res *stubs.PauseResponse
 
 func main() {
 	pAddr := "8030"
-	// registering our service
+	// Registering our service
 	rpc.Register(&GolOperations{})
 
-	// create a network listener
-	listener, _ := net.Listen("tcp", ":"+pAddr)
+	// Create a network listener
+	listener, err := net.Listen("tcp", ":"+pAddr)
+	if err != nil {
+		fmt.Println("Error starting server:", err)
+		return
+	}
+	defer listener.Close()
 
-	// go routine to enable us to close once finished OR close until we want to shutdown
-	go rpc.Accept(listener)
+	// Initialize closeServerChan and stopTurnsChan
+	closeServerChan = make(chan struct{})
+	stopTurnsChan = make(chan struct{})
+
+	// Goroutine to accept connections using rpc.Accept
+	go func() {
+		defer listener.Close()
+		defer close(closeServerChan) // Close closeServerChan when the goroutine exits
+
+		fmt.Println("Server listening on", listener.Addr())
+
+		// Accept connections and serve them
+		rpc.Accept(listener)
+	}()
+
+	// Block until a close signal is received
 	<-closeServerChan
-	listener.Close()
+
+	fmt.Println("Shutting down...")
+
+	// Signal the RunTurns goroutine to stop
+	close(stopTurnsChan)
+
+	fmt.Println("Server shutdown complete")
 }
+
+// func main() {
+// 	pAddr := "8030"
+// 	// registering our service
+// 	rpc.Register(&GolOperations{})
+
+// 	// create a network listener
+// 	listener, _ := net.Listen("tcp", ":"+pAddr)
+
+// 	defer listener.Close()
+
+// 	closeServerChan = make(chan struct{})
+// 	stopTurnsChan = make(chan struct{})
+
+// 	// Goroutine to accept connections
+// 	go func() {
+// 		defer listener.Close()
+// 		defer close(closeServerChan) // Close closeServerChan when the goroutine exits
+
+// 		// Accept connections
+// 		for {
+// 			conn, err := listener.Accept()
+// 			if err != nil {
+// 				// Handle the error, e.g., log it, and break out of the loop
+// 				fmt.Println("Error accepting connection:", err)
+// 				break
+// 			}
+
+// 			// Handle the connection in a goroutine
+// 			go func() {
+// 				defer conn.Close()
+// 				rpc.ServeConn(conn)
+// 			}()
+// 		}
+// 	}()
+
+// 	// Block until a close signal is received
+// 	<-closeServerChan
+
+// 	fmt.Println("Shutting down...")
+
+// 	// Close the listener to stop accepting new connections
+// 	listener.Close()
+
+// 	// Signal the RunTurns goroutine to stop
+// 	close(stopTurnsChan)
+
+// 	fmt.Println("Server shutdown complete")
+
+// 	// go routine to enable us to close once finished OR close until we want to shutdown
+// 	// go rpc.Accept(listener)
+// 	// <-closeServerChan
+// 	// listener.Close()
+// }
 
 func calculateNextState() [][]byte {
 	//   world[ row ][ col ]
