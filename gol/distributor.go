@@ -130,7 +130,7 @@ func distributor(p Params, c distributorChannels) {
 	}()
 
 	paused := false
-
+	finalTurns := p.Turns
 	go func() {
 	keysLoop:
 		for {
@@ -142,22 +142,25 @@ func distributor(p Params, c distributorChannels) {
 					go makeScreenshotCall(client, pgmResultChannel)
 					generatePGM(p, c, (<-pgmResultChannel).World)
 				case 'q':
-					quitChannel := make(chan stubs.QuitResponse)
-					go makeQuitCall(client, quitChannel)
-					c.ioCommand <- ioCheckIdle
-					<-c.ioIdle
-					c.events <- StateChange{(<-quitChannel).Turn, Quitting}
+					quitResultChannel := make(chan stubs.QuitResponse)
+					go makeQuitCall(client, quitResultChannel)
+					// FIXME ideally don't want the channel logic in here. should use the existing part at the end of distributor
+					finalTurns = (<-quitResultChannel).Turn
+					// c.ioCommand <- ioCheckIdle
+					// <-c.ioIdle
+					// c.events <- StateChange{(<-quitResultChannel).Turn, Quitting}
 					close(c.events)
-					break keysLoop
+					// break keysLoop
+					return
 				case 'k':
-					closeChan := make(chan stubs.CloseServerResponse)
-					go makeCloseServerCall(client, closeChan)
-					res := <-closeChan
+					closeServerResultChannel := make(chan stubs.CloseServerResponse)
+					go makeCloseServerCall(client, closeServerResultChannel)
+					res := <-closeServerResultChannel
 					ticker.Stop()
 					c.ioCommand <- ioCheckIdle
 					<-c.ioIdle
 					c.events <- StateChange{res.Turn, Quitting}
-					generatePGM(p, c, res.World)
+					// generatePGM(p, c, res.World) // FIXME index out of range [0] with length 0
 					close(c.events)
 					break keysLoop
 				case 'p':
@@ -175,12 +178,12 @@ func distributor(p Params, c distributorChannels) {
 						c.events <- StateChange{(<-restartChan).Turn, Executing}
 
 					}
-
 				}
 			}
 		}
 	}()
 
+	// FIXME need to make sure a final world is returned if the game is quit early (by pressing q or k)
 	finalWorld := (<-runGameResultChannel).World
 	ticker.Stop()
 
@@ -188,18 +191,19 @@ func distributor(p Params, c distributorChannels) {
 	// ? Should the final alive cells be calculated in the server??? does this count as GOL logic???
 	alive := calculateAliveCells(p, finalWorld)
 	c.events <- FinalTurnComplete{
-		CompletedTurns: p.Turns,
+		CompletedTurns: finalTurns,
 		Alive:          alive,
 	}
 
-	// print2DArray(finalWorld)
 	generatePGM(p, c, finalWorld)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
+	fmt.Println("a")
 	<-c.ioIdle
-
-	c.events <- StateChange{p.Turns, Quitting}
+	fmt.Println("b")
+	c.events <- StateChange{finalTurns, Quitting}
+	fmt.Println("c")
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
@@ -229,14 +233,5 @@ func generatePGM(p Params, c distributorChannels, world [][]byte) {
 		for x := 0; x < p.ImageWidth; x++ {
 			c.ioOutput <- world[y][x]
 		}
-	}
-}
-
-func print2DArray(arr [][]byte) {
-	for i := 0; i < len(arr); i++ {
-		for j := 0; j < len(arr[i]); j++ {
-			fmt.Printf("%d\t", arr[i][j])
-		}
-		fmt.Println()
 	}
 }

@@ -18,15 +18,21 @@ var (
 	mutex           sync.Mutex
 	closeServerChan chan struct{}
 	stopTurnsChan   chan struct{}
+	quitClientChan  chan struct{}
+	calcFinished    sync.WaitGroup
 )
 
 func RunTurns(turns int, resultChan chan<- [][]byte, stopChan <-chan struct{}) (err error) {
+	defer calcFinished.Done()
 	turn = 0
+TurnsLoop:
 	for ; turn < turns; turn++ {
 		fmt.Println(turn)
 		select {
 		case <-stopChan:
-			return // Terminate the goroutine if the stop signal is received
+			// TODO ensure world is copied here
+			break TurnsLoop
+			// return // Terminate the goroutine if the stop signal is received
 		default:
 			newWorld := calculateNextState()
 			mutex.Lock()
@@ -34,13 +40,17 @@ func RunTurns(turns int, resultChan chan<- [][]byte, stopChan <-chan struct{}) (
 			mutex.Unlock()
 		}
 	}
+	mutex.Lock()
 	resultChan <- world
+	mutex.Unlock()
 	return
 }
 
 type GolOperations struct{}
 
 func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
+
+	// TODO make sure a world is returned if the server is shut prematurely
 
 	// global variables
 	mutex.Lock()
@@ -50,9 +60,9 @@ func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResp
 	mutex.Unlock()
 
 	resultChan := make(chan [][]byte)
-	go RunTurns(req.Turns, resultChan, stopTurnsChan)
+	calcFinished.Add(1)
+	go RunTurns(req.Turns, resultChan, quitClientChan)
 	res.World = <-resultChan
-	close(stopTurnsChan)
 	return
 }
 
@@ -67,7 +77,6 @@ func (g *GolOperations) AliveCellsCount(req stubs.AliveCellsCountRequest, res *s
 func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.ScreenshotResponse) (err error) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	print2DArray(res.World)
 	newWorld := make([][]byte, height)
 	for i := 0; i < height; i++ {
 		newWorld[i] = make([]byte, width)
@@ -78,11 +87,25 @@ func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.Scree
 }
 
 func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error) {
+	close(quitClientChan)
+
+	calcFinished.Wait()
 	res.Turn = turn
+
+	// reset state
+	turn = 0
+	height = 0
+	width = 0
+	world = nil
+
+	// open new channel to listen for quit requests
+	quitClientChan = make(chan struct{})
+
 	return
 }
 
 func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
+	// FIXME i think res.World needs to be initialised
 	closeServerChan <- struct{}{}
 	res.World = world
 	res.Turn = turn
@@ -117,6 +140,7 @@ func main() {
 	// Initialize closeServerChan and stopTurnsChan
 	closeServerChan = make(chan struct{})
 	stopTurnsChan = make(chan struct{})
+	quitClientChan = make(chan struct{})
 
 	// Goroutine to accept connections using rpc.Accept
 	go func() {
@@ -139,60 +163,6 @@ func main() {
 
 	fmt.Println("Server shutdown complete")
 }
-
-// func main() {
-// 	pAddr := "8030"
-// 	// registering our service
-// 	rpc.Register(&GolOperations{})
-
-// 	// create a network listener
-// 	listener, _ := net.Listen("tcp", ":"+pAddr)
-
-// 	defer listener.Close()
-
-// 	closeServerChan = make(chan struct{})
-// 	stopTurnsChan = make(chan struct{})
-
-// 	// Goroutine to accept connections
-// 	go func() {
-// 		defer listener.Close()
-// 		defer close(closeServerChan) // Close closeServerChan when the goroutine exits
-
-// 		// Accept connections
-// 		for {
-// 			conn, err := listener.Accept()
-// 			if err != nil {
-// 				// Handle the error, e.g., log it, and break out of the loop
-// 				fmt.Println("Error accepting connection:", err)
-// 				break
-// 			}
-
-// 			// Handle the connection in a goroutine
-// 			go func() {
-// 				defer conn.Close()
-// 				rpc.ServeConn(conn)
-// 			}()
-// 		}
-// 	}()
-
-// 	// Block until a close signal is received
-// 	<-closeServerChan
-
-// 	fmt.Println("Shutting down...")
-
-// 	// Close the listener to stop accepting new connections
-// 	listener.Close()
-
-// 	// Signal the RunTurns goroutine to stop
-// 	close(stopTurnsChan)
-
-// 	fmt.Println("Server shutdown complete")
-
-// 	// go routine to enable us to close once finished OR close until we want to shutdown
-// 	// go rpc.Accept(listener)
-// 	// <-closeServerChan
-// 	// listener.Close()
-// }
 
 func calculateNextState() [][]byte {
 	//   world[ row ][ col ]
@@ -253,13 +223,4 @@ func calculateAliveCells(height, width int) []util.Cell {
 		}
 	}
 	return aliveCells
-}
-
-func print2DArray(arr [][]byte) {
-	for i := 0; i < len(arr); i++ {
-		for j := 0; j < len(arr[i]); j++ {
-			fmt.Printf("%d\t", arr[i][j])
-		}
-		fmt.Println()
-	}
 }
