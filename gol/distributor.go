@@ -129,28 +129,27 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	paused := false
-	finalTurns := p.Turns
+	paused := false                    // stores whether execution has been paused
+	finalTurns := p.Turns              // number of turns completed when program exits
+	earlyExit := false                 // stores whether the program was exited early (with a keypress)
+	confirmQuit := make(chan struct{}) // used to wait for quit logic to finish
+
 	go func() {
 	keysLoop:
 		for {
 			select {
 			case key := <-c.keyPresses:
-				pgmResultChannel := make(chan stubs.ScreenshotResponse)
 				switch key {
 				case 's':
+					pgmResultChannel := make(chan stubs.ScreenshotResponse)
 					go makeScreenshotCall(client, pgmResultChannel)
 					generatePGM(p, c, (<-pgmResultChannel).World)
 				case 'q':
+					earlyExit = true
 					quitResultChannel := make(chan stubs.QuitResponse)
 					go makeQuitCall(client, quitResultChannel)
-					// FIXME ideally don't want the channel logic in here. should use the existing part at the end of distributor
 					finalTurns = (<-quitResultChannel).Turn
-					// c.ioCommand <- ioCheckIdle
-					// <-c.ioIdle
-					// c.events <- StateChange{(<-quitResultChannel).Turn, Quitting}
-					close(c.events)
-					// break keysLoop
+					close(confirmQuit)
 					return
 				case 'k':
 					closeServerResultChannel := make(chan stubs.CloseServerResponse)
@@ -183,31 +182,32 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	// FIXME need to make sure a final world is returned if the game is quit early (by pressing q or k)
+	// FIXME need to make sure a final world is returned if the game is quit early (by pressing k)
 	finalWorld := (<-runGameResultChannel).World
 	ticker.Stop()
-
-	// Report the final state using FinalTurnCompleteEvent.
-	// ? Should the final alive cells be calculated in the server??? does this count as GOL logic???
-	alive := calculateAliveCells(p, finalWorld)
-	c.events <- FinalTurnComplete{
-		CompletedTurns: finalTurns,
-		Alive:          alive,
+	if earlyExit {
+		<-confirmQuit
 	}
 
 	generatePGM(p, c, finalWorld)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
-	fmt.Println("a")
 	<-c.ioIdle
-	fmt.Println("b")
 	c.events <- StateChange{finalTurns, Quitting}
-	fmt.Println("c")
+
+	// Report the final state using FinalTurnCompleteEvent.
+	alive := calculateAliveCells(p, finalWorld)
+	c.events <- FinalTurnComplete{
+		CompletedTurns: finalTurns,
+		Alive:          alive,
+	}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
 }
+
+// -----------------------------------------------------------------------------------------
 
 // ? see query above
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {

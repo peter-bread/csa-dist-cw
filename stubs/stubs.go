@@ -19,6 +19,7 @@ type RunGameRequest struct {
 
 type RunGameResponse struct {
 	World [][]byte
+	Turn  int
 }
 
 type AliveCellsCountRequest struct {

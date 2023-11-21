@@ -22,17 +22,14 @@ var (
 	calcFinished    sync.WaitGroup
 )
 
-func RunTurns(turns int, resultChan chan<- [][]byte, stopChan <-chan struct{}) (err error) {
+func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 	defer calcFinished.Done()
 	turn = 0
 TurnsLoop:
 	for ; turn < turns; turn++ {
-		fmt.Println(turn)
 		select {
-		case <-stopChan:
-			// TODO ensure world is copied here
+		case <-quitClientChan:
 			break TurnsLoop
-			// return // Terminate the goroutine if the stop signal is received
 		default:
 			newWorld := calculateNextState()
 			mutex.Lock()
@@ -50,7 +47,7 @@ type GolOperations struct{}
 
 func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
 
-	// TODO make sure a world is returned if the server is shut prematurely
+	// TODO make sure a world is returned if the server is shut prematurely (with k keypress)
 
 	// global variables
 	mutex.Lock()
@@ -61,7 +58,7 @@ func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResp
 
 	resultChan := make(chan [][]byte)
 	calcFinished.Add(1)
-	go RunTurns(req.Turns, resultChan, quitClientChan)
+	go RunTurns(req.Turns, resultChan)
 	res.World = <-resultChan
 	return
 }
@@ -87,9 +84,12 @@ func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.Scree
 }
 
 func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error) {
-	close(quitClientChan)
+	close(quitClientChan) // signal that the client wants to quit
 
-	calcFinished.Wait()
+	calcFinished.Wait() // wait for last turn to be completed
+
+	mutex.Lock()
+
 	res.Turn = turn
 
 	// reset state
@@ -98,15 +98,17 @@ func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (er
 	width = 0
 	world = nil
 
+	mutex.Unlock()
+
 	// open new channel to listen for quit requests
 	quitClientChan = make(chan struct{})
-
 	return
 }
 
 func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
-	// FIXME i think res.World needs to be initialised
-	closeServerChan <- struct{}{}
+	// // FIXME i think res.World needs to be initialised
+	// FIXME base off Quit: signal that the client wants to quit, stop execution and return world & turns, then shut server
+	close(closeServerChan)
 	res.World = world
 	res.Turn = turn
 	return
