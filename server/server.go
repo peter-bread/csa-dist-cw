@@ -11,24 +11,23 @@ import (
 )
 
 var (
-	world           [][]byte
-	height          int
-	width           int
-	turn            int
-	mutex           sync.Mutex
-	closeServerChan chan struct{}
-	stopTurnsChan   chan struct{}
-	quitClientChan  chan struct{}
-	calcFinished    sync.WaitGroup
+	world                 [][]byte
+	height                int
+	width                 int
+	turn                  int
+	mutex                 sync.Mutex
+	closeServerChan       chan struct{}
+	stopTurnsChan         chan struct{}
+	turnExecutionFinished sync.WaitGroup
 )
 
 func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
-	defer calcFinished.Done()
+	defer turnExecutionFinished.Done()
 	turn = 0
 TurnsLoop:
 	for ; turn < turns; turn++ {
 		select {
-		case <-quitClientChan:
+		case <-stopTurnsChan:
 			break TurnsLoop
 		default:
 			newWorld := calculateNextState()
@@ -47,17 +46,15 @@ type GolOperations struct{}
 
 func (g *GolOperations) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (err error) {
 
-	// TODO make sure a world is returned if the server is shut prematurely (with k keypress)
-
-	// global variables
+	// set global variables
 	mutex.Lock()
 	world = req.World
-	height = req.Height // should never change
-	width = req.Width   // should never change
+	height = req.Height // should only change after Quit has been called and a new world is passed in to RunGame
+	width = req.Width   // should only change after Quit has been called and a new world is passed in to RunGame
 	mutex.Unlock()
 
 	resultChan := make(chan [][]byte)
-	calcFinished.Add(1)
+	turnExecutionFinished.Add(1)
 	go RunTurns(req.Turns, resultChan)
 	res.World = <-resultChan
 	return
@@ -72,21 +69,21 @@ func (g *GolOperations) AliveCellsCount(req stubs.AliveCellsCountRequest, res *s
 }
 
 func (g *GolOperations) Screenshot(req stubs.ScreenshotRequest, res *stubs.ScreenshotResponse) (err error) {
-	mutex.Lock()
-	defer mutex.Unlock()
 	newWorld := make([][]byte, height)
 	for i := 0; i < height; i++ {
 		newWorld[i] = make([]byte, width)
 	}
+	mutex.Lock()
 	copy(newWorld, world)
 	res.World = newWorld
+	mutex.Unlock()
 	return
 }
 
 func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error) {
-	close(quitClientChan) // signal that the client wants to quit
+	close(stopTurnsChan) // signal that the client wants to quit
 
-	calcFinished.Wait() // wait for last turn to be completed
+	turnExecutionFinished.Wait() // wait for last turn to be completed
 
 	mutex.Lock()
 
@@ -101,16 +98,13 @@ func (g *GolOperations) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (er
 	mutex.Unlock()
 
 	// open new channel to listen for quit requests
-	quitClientChan = make(chan struct{})
+	stopTurnsChan = make(chan struct{})
 	return
 }
 
 func (g *GolOperations) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
-	// // FIXME i think res.World needs to be initialised
-	// FIXME base off Quit: signal that the client wants to quit, stop execution and return world & turns, then shut server
-	close(closeServerChan)
-	res.World = world
-	res.Turn = turn
+	close(stopTurnsChan)   // close channel (even though that doesn't trigger anything, just cleaning up)
+	close(closeServerChan) // signal that we want to close the server down
 	return
 }
 
@@ -142,7 +136,6 @@ func main() {
 	// Initialize closeServerChan and stopTurnsChan
 	closeServerChan = make(chan struct{})
 	stopTurnsChan = make(chan struct{})
-	quitClientChan = make(chan struct{})
 
 	// Goroutine to accept connections using rpc.Accept
 	go func() {
@@ -157,12 +150,6 @@ func main() {
 
 	// Block until a close signal is received
 	<-closeServerChan
-
-	fmt.Println("Shutting down...")
-
-	// Signal the RunTurns goroutine to stop
-	close(stopTurnsChan)
-
 	fmt.Println("Server shutdown complete")
 }
 

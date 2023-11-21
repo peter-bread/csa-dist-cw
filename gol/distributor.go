@@ -3,6 +3,7 @@ package gol
 import (
 	"log"
 	"net/rpc"
+	"sync"
 	"time"
 
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -21,8 +22,10 @@ type distributorChannels struct {
 	keyPresses <-chan rune
 }
 
+var wg sync.WaitGroup
+
 func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- stubs.RunGameResponse) {
-	// defined req
+	defer wg.Done()
 	req := stubs.RunGameRequest{
 		Turns:  p.Turns,
 		Height: p.ImageHeight,
@@ -31,7 +34,6 @@ func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan ch
 	}
 	res := new(stubs.RunGameResponse)
 	client.Call(stubs.RunGame, req, res)
-
 	resultChan <- *res
 }
 
@@ -56,11 +58,10 @@ func makeQuitCall(client *rpc.Client, resultChan chan<- stubs.QuitResponse) {
 	resultChan <- *res
 }
 
-func makeCloseServerCall(client *rpc.Client, resultChan chan<- stubs.CloseServerResponse) {
+func makeCloseServerCall(client *rpc.Client) {
 	req := stubs.CloseServerRequest{}
 	res := new(stubs.CloseServerResponse)
 	client.Call(stubs.Shutdown, req, res)
-	resultChan <- *res
 }
 
 func makePauseCall(client *rpc.Client, resultChan chan<- stubs.PauseResponse) {
@@ -111,6 +112,7 @@ func distributor(p Params, c distributorChannels) {
 
 	ticker := time.NewTicker(2 * time.Second)
 
+	wg.Add(1)
 	runGameResultChannel := make(chan stubs.RunGameResponse)
 	go makeRunGameCall(client, world, p, runGameResultChannel)
 
@@ -129,13 +131,11 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	paused := false                    // stores whether execution has been paused
-	finalTurns := p.Turns              // number of turns completed when program exits
-	earlyExit := false                 // stores whether the program was exited early (with a keypress)
-	confirmQuit := make(chan struct{}) // used to wait for quit logic to finish
+	paused := false       // stores whether execution has been paused
+	finalTurns := p.Turns // number of turns completed when program exits
 
 	go func() {
-	keysLoop:
+		// keysLoop:
 		for {
 			select {
 			case key := <-c.keyPresses:
@@ -145,50 +145,45 @@ func distributor(p Params, c distributorChannels) {
 					go makeScreenshotCall(client, pgmResultChannel)
 					generatePGM(p, c, (<-pgmResultChannel).World)
 				case 'q':
-					earlyExit = true
 					quitResultChannel := make(chan stubs.QuitResponse)
 					go makeQuitCall(client, quitResultChannel)
 					finalTurns = (<-quitResultChannel).Turn
-					close(confirmQuit)
 					return
 				case 'k':
-					closeServerResultChannel := make(chan stubs.CloseServerResponse)
-					go makeCloseServerCall(client, closeServerResultChannel)
-					res := <-closeServerResultChannel
-					ticker.Stop()
-					c.ioCommand <- ioCheckIdle
-					<-c.ioIdle
-					c.events <- StateChange{res.Turn, Quitting}
-					// generatePGM(p, c, res.World) // FIXME index out of range [0] with length 0
-					close(c.events)
-					break keysLoop
+					// send quit request
+					quitResultChannel := make(chan stubs.QuitResponse)
+					go makeQuitCall(client, quitResultChannel)
+					finalTurns = (<-quitResultChannel).Turn
+
+					// wait for world to be read from server
+					wg.Wait()
+
+					// send close request
+					go makeCloseServerCall(client)
+					return
 				case 'p':
 					paused = !paused
-					// if paused, send pause request, else send restart request
 					if paused {
-						pauseChan := make(chan stubs.PauseResponse)
-						go makePauseCall(client, pauseChan)
+						pauseResultChan := make(chan stubs.PauseResponse)
+						go makePauseCall(client, pauseResultChan)
 						ticker.Stop()
-						c.events <- StateChange{(<-pauseChan).Turn, Paused}
+						c.events <- StateChange{(<-pauseResultChan).Turn, Paused}
 					} else {
-						restartChan := make(chan stubs.RestartResponse)
-						go makeRestartCall(client, restartChan)
+						restartResultChan := make(chan stubs.RestartResponse)
+						go makeRestartCall(client, restartResultChan)
 						ticker.Reset(2 * time.Second)
-						c.events <- StateChange{(<-restartChan).Turn, Executing}
-
+						c.events <- StateChange{(<-restartResultChan).Turn, Executing}
 					}
 				}
 			}
 		}
 	}()
 
-	// FIXME need to make sure a final world is returned if the game is quit early (by pressing k)
+	// get final world from server
 	finalWorld := (<-runGameResultChannel).World
 	ticker.Stop()
-	if earlyExit {
-		<-confirmQuit
-	}
 
+	// generate pgm image of final world state
 	generatePGM(p, c, finalWorld)
 
 	// Make sure that the Io has finished any output before exiting.
@@ -207,9 +202,7 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
-// -----------------------------------------------------------------------------------------
-
-// ? see query above
+// ? should this be calculated in the server (does this count as GOL logic???)
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	aliveCells := make([]util.Cell, 0, p.ImageHeight*p.ImageWidth)
 	for rowI, row := range world {
