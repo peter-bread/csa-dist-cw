@@ -131,7 +131,6 @@ func main() {
 		fmt.Println("Error starting server:", err)
 		return
 	}
-	defer listener.Close()
 
 	// Initialize closeServerChan and stopTurnsChan
 	closeServerChan = make(chan struct{})
@@ -140,7 +139,6 @@ func main() {
 	// Goroutine to accept connections using rpc.Accept
 	go func() {
 		defer listener.Close()
-		defer close(closeServerChan) // Close closeServerChan when the goroutine exits
 
 		fmt.Println("Server listening on", listener.Addr())
 
