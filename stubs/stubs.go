@@ -1,13 +1,13 @@
 package stubs
 
 var (
-	RunGame         = "GolOperations.RunGame"
-	AliveCellsCount = "GolOperations.AliveCellsCount"
-	Screenshot      = "GolOperations.Screenshot"
-	Quit            = "GolOperations.Quit"
-	Shutdown        = "GolOperations.CloseServer"
-	Pause           = "GolOperations.Pause"
-	Restart         = "GolOperations.Restart"
+	RunGame         = "Broker.RunGame"
+	AliveCellsCount = "Broker.AliveCellsCount"
+	Screenshot      = "Broker.Screenshot"
+	Quit            = "Broker.Quit"
+	Shutdown        = "Broker.CloseServer"
+	Pause           = "Broker.Pause"
+	Restart         = "Broker.Restart"
 )
 
 type RunGameRequest struct {
@@ -44,9 +44,9 @@ type QuitResponse struct {
 	Turn int
 }
 
-type CloseServerRequest struct{}
+type CloseBrokerRequest struct{}
 
-type CloseServerResponse struct{}
+type CloseBrokerResponse struct{}
 
 type PauseRequest struct{}
 

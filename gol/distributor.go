@@ -58,9 +58,9 @@ func makeQuitCall(client *rpc.Client, resultChan chan<- stubs.QuitResponse) {
 	resultChan <- *res
 }
 
-func makeCloseServerCall(client *rpc.Client) {
-	req := stubs.CloseServerRequest{}
-	res := new(stubs.CloseServerResponse)
+func makeCloseBrokerCall(client *rpc.Client) {
+	req := stubs.CloseBrokerRequest{}
+	res := new(stubs.CloseBrokerResponse)
 	client.Call(stubs.Shutdown, req, res)
 }
 
@@ -79,10 +79,10 @@ func makeRestartCall(client *rpc.Client, resultChan chan<- stubs.RestartResponse
 }
 
 func distributor(p Params, c distributorChannels) {
-	server := "127.0.0.1:8030"
-	fmt.Println("Server: ", server)
-	// dial server address that has been passed
-	client, err := rpc.Dial("tcp", server)
+	broker := "127.0.0.1:8030"
+	fmt.Println("Broker: ", broker)
+	// dial Broker address that has been passed
+	client, err := rpc.Dial("tcp", broker)
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}
@@ -155,11 +155,11 @@ func distributor(p Params, c distributorChannels) {
 					go makeQuitCall(client, quitResultChannel)
 					finalTurns = (<-quitResultChannel).Turn
 
-					// wait for world to be read from server
+					// wait for world to be read from Broker
 					wg.Wait()
 
 					// send close request
-					go makeCloseServerCall(client)
+					go makeCloseBrokerCall(client)
 					return
 				case 'p':
 					paused = !paused
@@ -179,7 +179,7 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	// get final world from server
+	// get final world from Broker
 	finalWorld := (<-runGameResultChannel).World
 	ticker.Stop()
 
@@ -202,7 +202,7 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
-// ? should this be calculated in the server (does this count as GOL logic???)
+// ? should this be calculated in the Broker (does this count as GOL logic???)
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 	aliveCells := make([]util.Cell, 0, p.ImageHeight*p.ImageWidth)
 	for rowI, row := range world {
