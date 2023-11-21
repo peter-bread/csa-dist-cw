@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"sync"
@@ -21,18 +22,44 @@ var (
 	turnExecutionFinished sync.WaitGroup
 )
 
+func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateResponse) {
+	req := stubs.NextStateRequest{
+		World:  world,
+		Height: height,
+		Width:  width,
+	}
+	res := new(stubs.NextStateResponse)
+	client.Call(stubs.NextState, req, res)
+	resultChan <- *res
+}
+
 func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 	defer turnExecutionFinished.Done()
 	turn = 0
+
 TurnsLoop:
 	for ; turn < turns; turn++ {
+		fmt.Println("turn= ", turn)
 		select {
 		case <-stopTurnsChan:
 			break TurnsLoop
 		default:
 			// TODO 1. call server to calculate and return next state
 			// TODO 2. split the world into slices and send each of them to different servers to be processed
-			newWorld := calculateNextState()
+
+			server := "127.0.0.1:8050"
+			fmt.Println("Server: ", server)
+
+			// dial server address
+			client, err := rpc.Dial("tcp", server)
+			if err != nil {
+				log.Fatal("dialing:", err)
+			}
+
+			nextStateResultChannel := make(chan stubs.NextStateResponse)
+			go makeNewStateCall(client, nextStateResultChannel)
+			newWorld := (<-nextStateResultChannel).World
+			// newWorld := calculateNextState()
 			mutex.Lock()
 			copy(world, newWorld)
 			mutex.Unlock()
@@ -151,53 +178,6 @@ func main() {
 	// Block until a close signal is received
 	<-closeBrokerChan
 	fmt.Println("Broker shutdown complete")
-}
-
-func calculateNextState() [][]byte {
-	//   world[ row ][ col ]
-	//      up/down    left/right
-
-	newWorld := make([][]byte, height)
-	for i := range newWorld {
-		newWorld[i] = make([]byte, width)
-	}
-
-	for rowI, row := range world { // for each row of the grid
-		for colI, cellVal := range row { // for each cell in the row
-
-			aliveNeighbours := 0 // initially there are 0 living neighbours
-
-			// iterate through neighbours
-			for i := -1; i < 2; i++ {
-				for j := -1; j < 2; j++ {
-
-					// if cell is a neighbour (i.e. not the cell having its neighbours checked)
-					if i != 0 || j != 0 {
-
-						// Calculate neighbour coordinates with wrapping
-						neighbourRow := (rowI + i + height) % height
-						neighbourCol := (colI + j + width) % width
-
-						// Check if the wrapped neighbour is alive
-						if world[neighbourRow][neighbourCol] == 255 {
-							aliveNeighbours++
-						}
-					}
-				}
-			}
-			// implement rules
-			if cellVal == 255 && aliveNeighbours < 2 { // cell is lonely and dies
-				newWorld[rowI][colI] = 0
-			} else if cellVal == 255 && aliveNeighbours > 3 { // cell killed by overpopulation
-				newWorld[rowI][colI] = 0
-			} else if cellVal == 0 && aliveNeighbours == 3 { // new cell is born
-				newWorld[rowI][colI] = 255
-			} else { // cell remains as it is
-				newWorld[rowI][colI] = world[rowI][colI]
-			}
-		}
-	}
-	return newWorld
 }
 
 func calculateAliveCells(height, width int) []util.Cell {
