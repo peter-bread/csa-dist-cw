@@ -8,10 +8,17 @@ import (
 	"uk.ac.bris.cs/gameoflife/stubs"
 )
 
+var closeServerChan chan struct{}
+
 type Server struct{}
 
 func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStateResponse) (err error) {
 	res.World = calculateNextState(req.Height, req.Width, req.World)
+	return
+}
+
+func (s *Server) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
+	close(closeServerChan)
 	return
 }
 
@@ -69,7 +76,14 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println("Server listening on", listener.Addr())
-	defer listener.Close()
-	rpc.Accept(listener)
+	closeServerChan = make(chan struct{})
+	go func() {
+		fmt.Println("Server listening on", listener.Addr())
+		defer listener.Close()
+		rpc.Accept(listener)
+	}()
+
+	<-closeServerChan
+	fmt.Println("Server shutdown complete")
+
 }

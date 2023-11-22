@@ -61,7 +61,7 @@ func makeQuitCall(client *rpc.Client, resultChan chan<- stubs.QuitResponse) {
 func makeCloseBrokerCall(client *rpc.Client) {
 	req := stubs.CloseBrokerRequest{}
 	res := new(stubs.CloseBrokerResponse)
-	client.Call(stubs.Shutdown, req, res)
+	client.Call(stubs.CloseBroker, req, res)
 }
 
 func makePauseCall(client *rpc.Client, resultChan chan<- stubs.PauseResponse) {

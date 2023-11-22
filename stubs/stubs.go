@@ -5,10 +5,11 @@ var (
 	AliveCellsCount = "Broker.AliveCellsCount"
 	Screenshot      = "Broker.Screenshot"
 	Quit            = "Broker.Quit"
-	Shutdown        = "Broker.CloseBroker"
+	CloseBroker     = "Broker.CloseBroker"
 	Pause           = "Broker.Pause"
 	Restart         = "Broker.Restart"
 	NextState       = "Server.ReturnNextState"
+	CloseServer     = "Server.CloseServer"
 )
 
 type RunGameRequest struct {
@@ -68,3 +69,7 @@ type NextStateRequest struct {
 type NextStateResponse struct {
 	World [][]byte
 }
+
+type CloseServerRequest struct{}
+
+type CloseServerResponse struct{}

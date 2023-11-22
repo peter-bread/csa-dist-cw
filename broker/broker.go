@@ -46,7 +46,6 @@ TurnsLoop:
 			// TODO 1.  split the world into 4 slices and send each of them to different servers to be processed
 			// TODO 2a. start by hardcoding 4 different servers on 4 ports (8050-8053) (manually start servers in separate shell sessions)
 			// TODO 2b. use os/exec to start shell sessions and run servers in there
-
 			server := "127.0.0.1:8050"
 
 			// dial server address
@@ -128,8 +127,35 @@ func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error
 }
 
 func (g *Broker) CloseBroker(req stubs.CloseBrokerRequest, res *stubs.CloseBrokerResponse) (err error) {
-	close(stopTurnsChan)   // close channel (even though that doesn't trigger anything, just cleaning up)
+	close(stopTurnsChan) // close channel (even though that doesn't trigger anything, just cleaning up)
+
+	// close server
+	// TODO modify to close multiple servers
+	closeServerReq := stubs.CloseServerRequest{}
+	closeServerRes := new(stubs.CloseServerResponse)
+	err = g.CloseServer(closeServerReq, closeServerRes)
+	if err != nil {
+		log.Fatal("Error closing the server:", err)
+	}
+
 	close(closeBrokerChan) // signal that we want to close the Broker down
+	return
+}
+
+func (g *Broker) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
+	// Create an RPC client to connect to the server
+	server := "127.0.0.1:8050"
+	client, err := rpc.Dial("tcp", server)
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
+
+	// Call CloseServer on the server
+	err = client.Call(stubs.CloseServer, req, res)
+	if err != nil {
+		log.Fatal("Error calling CloseServer on the server:", err)
+	}
+
 	return
 }
 
