@@ -157,7 +157,7 @@ func main() {
 		return
 	}
 
-	// Initialize closeBrokerChan and stopTurnsChan
+	// Initialise closeBrokerChan and stopTurnsChan
 	closeBrokerChan = make(chan struct{})
 	stopTurnsChan = make(chan struct{})
 
