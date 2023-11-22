@@ -133,7 +133,7 @@ func (g *Broker) CloseBroker(req stubs.CloseBrokerRequest, res *stubs.CloseBroke
 	// TODO modify to close multiple servers
 	closeServerReq := stubs.CloseServerRequest{}
 	closeServerRes := new(stubs.CloseServerResponse)
-	err = g.CloseServer(closeServerReq, closeServerRes)
+	err = makeCloseServerCall(closeServerReq, closeServerRes)
 	if err != nil {
 		log.Fatal("Error closing the server:", err)
 	}
@@ -142,7 +142,7 @@ func (g *Broker) CloseBroker(req stubs.CloseBrokerRequest, res *stubs.CloseBroke
 	return
 }
 
-func (g *Broker) CloseServer(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
+func makeCloseServerCall(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
 	// Create an RPC client to connect to the server
 	server := "127.0.0.1:8050"
 	client, err := rpc.Dial("tcp", server)
