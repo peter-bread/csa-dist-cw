@@ -43,8 +43,9 @@ TurnsLoop:
 		case <-stopTurnsChan:
 			break TurnsLoop
 		default:
-			// TODO 1. call server to calculate and return next state
-			// TODO 2. split the world into slices and send each of them to different servers to be processed
+			// TODO 1.  split the world into 4 slices and send each of them to different servers to be processed
+			// TODO 2a. start by hardcoding 4 different servers on 4 ports (8050-8053) (manually start servers in separate shell sessions)
+			// TODO 2b. use os/exec to start shell sessions and run servers in there
 
 			server := "127.0.0.1:8050"
 
@@ -57,7 +58,6 @@ TurnsLoop:
 			nextStateResultChannel := make(chan stubs.NextStateResponse)
 			go makeNewStateCall(client, nextStateResultChannel)
 			newWorld := (<-nextStateResultChannel).World
-			// newWorld := calculateNextState()
 			mutex.Lock()
 			copy(world, newWorld)
 			mutex.Unlock()
