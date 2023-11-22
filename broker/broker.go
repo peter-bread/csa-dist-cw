@@ -39,7 +39,6 @@ func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 
 TurnsLoop:
 	for ; turn < turns; turn++ {
-		fmt.Println("turn= ", turn)
 		select {
 		case <-stopTurnsChan:
 			break TurnsLoop
@@ -48,7 +47,6 @@ TurnsLoop:
 			// TODO 2. split the world into slices and send each of them to different servers to be processed
 
 			server := "127.0.0.1:8050"
-			fmt.Println("Server: ", server)
 
 			// dial server address
 			client, err := rpc.Dial("tcp", server)

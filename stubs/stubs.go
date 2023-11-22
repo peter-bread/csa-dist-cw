@@ -5,7 +5,7 @@ var (
 	AliveCellsCount = "Broker.AliveCellsCount"
 	Screenshot      = "Broker.Screenshot"
 	Quit            = "Broker.Quit"
-	Shutdown        = "Broker.CloseServer"
+	Shutdown        = "Broker.CloseBroker"
 	Pause           = "Broker.Pause"
 	Restart         = "Broker.Restart"
 	NextState       = "Server.ReturnNextState"
