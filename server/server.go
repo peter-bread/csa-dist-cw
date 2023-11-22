@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"net/rpc"
@@ -70,7 +71,11 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 }
 
 func main() {
-	pAddr := "8050"
+	var pAddr string
+	flag.StringVar(&pAddr, "port", "8050", "set the port that the server will listen on")
+	flag.Parse()
+	fmt.Println(pAddr)
+
 	rpc.Register(&Server{})
 	listener, err := net.Listen("tcp", ":"+pAddr)
 	if err != nil {
