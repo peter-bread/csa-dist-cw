@@ -23,10 +23,7 @@ type RunGameResponse struct {
 	Turn  int
 }
 
-type AliveCellsCountRequest struct {
-	Height int
-	Width  int
-}
+type AliveCellsCountRequest struct{}
 
 type AliveCellsCountResponse struct {
 	CompletedTurns int

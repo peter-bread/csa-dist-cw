@@ -91,7 +91,7 @@ func (g *Broker) AliveCellsCount(req stubs.AliveCellsCountRequest, res *stubs.Al
 	mutex.Lock()
 	res.CompletedTurns = turn
 	mutex.Unlock()
-	res.CellsCount = len(calculateAliveCells(req.Height, req.Width))
+	res.CellsCount = len(calculateAliveCells())
 	return
 }
 
@@ -176,7 +176,7 @@ func main() {
 	fmt.Println("Broker shutdown complete")
 }
 
-func calculateAliveCells(height, width int) []util.Cell {
+func calculateAliveCells() []util.Cell {
 	mutex.Lock()
 	defer mutex.Unlock()
 	aliveCells := make([]util.Cell, 0, height*width)
