@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"strconv"
 	"sync"
 
 	"uk.ac.bris.cs/gameoflife/stubs"
@@ -20,13 +21,31 @@ var (
 	closeBrokerChan       chan struct{}
 	stopTurnsChan         chan struct{}
 	turnExecutionFinished sync.WaitGroup
+	servers               []string
 )
 
-func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateResponse) {
+func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateResponse, i int) {
+	mutex.Lock()
+	// store copy of the world to send to server
+	tempWorld := make([][]byte, height)
+	for i := 0; i < height; i++ {
+		tempWorld[i] = make([]byte, width)
+	}
+	copy(tempWorld, world)
+	h := height
+	w := width
+	mutex.Unlock()
+
+	sliceHeight := h / 4 // this should always divide nicely (since we are hardcoding 4 servers and all given input files are divisible by 4)
+
 	req := stubs.NextStateRequest{
-		World:  world,
-		Height: height,
-		Width:  width,
+		World:       tempWorld,
+		WorldHeight: h,
+		WorldWidth:  w,
+		StartX:      0,
+		EndX:        w,
+		StartY:      sliceHeight * i,
+		EndY:        sliceHeight * (i + 1),
 	}
 	res := new(stubs.NextStateResponse)
 	client.Call(stubs.NextState, req, res)
@@ -37,26 +56,38 @@ func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 	defer turnExecutionFinished.Done()
 	turn = 0
 
+	clients := make([]*rpc.Client, 4)
+
+	for i := 0; i < 4; i++ {
+		clients[i], err = rpc.Dial("tcp", servers[i])
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+	}
+
 TurnsLoop:
 	for ; turn < turns; turn++ {
 		select {
 		case <-stopTurnsChan:
 			break TurnsLoop
 		default:
-			// TODO 1.  split the world into 4 slices and send each of them to different servers to be processed
-			// TODO 2a. start by hardcoding 4 different servers on 4 ports (8050-8053) (manually start servers in separate shell sessions)
-			// TODO 2b. use os/exec to start shell sessions and run servers in there
-			server := "127.0.0.1:8050"
 
-			// dial server address
-			client, err := rpc.Dial("tcp", server)
-			if err != nil {
-				log.Fatal("dialing:", err)
+			// list of channels to recieve newe world states
+			nextStateResultChannels := make([]chan stubs.NextStateResponse, 4)
+
+			// dial servers make rpc calls
+			for i := 0; i < 4; i++ {
+				nextStateResultChannels[i] = make(chan stubs.NextStateResponse)
+				go makeNewStateCall(clients[i], nextStateResultChannels[i], i)
 			}
 
-			nextStateResultChannel := make(chan stubs.NextStateResponse)
-			go makeNewStateCall(client, nextStateResultChannel)
-			newWorld := (<-nextStateResultChannel).World
+			var newWorld [][]byte
+
+			// reassemble new world state
+			for i := 0; i < 4; i++ {
+				newWorld = append(newWorld, (<-nextStateResultChannels[i]).World...)
+			}
+
 			mutex.Lock()
 			copy(world, newWorld)
 			mutex.Unlock()
@@ -129,8 +160,8 @@ func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error
 func (g *Broker) CloseBroker(req stubs.CloseBrokerRequest, res *stubs.CloseBrokerResponse) (err error) {
 	close(stopTurnsChan) // close channel (even though that doesn't trigger anything, just cleaning up)
 
-	// close server
-	// TODO modify to close multiple servers
+	// close servers
+	// ? if these requests/responses ever become stateful then will need to make a new req/res pair for each CloseServer call
 	closeServerReq := stubs.CloseServerRequest{}
 	closeServerRes := new(stubs.CloseServerResponse)
 	err = makeCloseServerCall(closeServerReq, closeServerRes)
@@ -143,19 +174,20 @@ func (g *Broker) CloseBroker(req stubs.CloseBrokerRequest, res *stubs.CloseBroke
 }
 
 func makeCloseServerCall(req stubs.CloseServerRequest, res *stubs.CloseServerResponse) (err error) {
-	// Create an RPC client to connect to the server
-	server := "127.0.0.1:8050"
-	client, err := rpc.Dial("tcp", server)
-	if err != nil {
-		log.Fatal("dialing:", err)
-	}
 
-	// Call CloseServer on the server
-	err = client.Call(stubs.CloseServer, req, res)
-	if err != nil {
-		log.Fatal("Error calling CloseServer on the server:", err)
-	}
+	// Create rpc clients to connect to the servers
+	clients := make([]*rpc.Client, 4)
 
+	for i := 0; i < 4; i++ {
+		clients[i], err = rpc.Dial("tcp", servers[i]) // dial server
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+		err = clients[i].Call(stubs.CloseServer, req, res) // close server
+		if err != nil {
+			log.Fatal("Error calling CloseServer on the server:", err)
+		}
+	}
 	return
 }
 
@@ -181,6 +213,12 @@ func main() {
 	if err != nil {
 		fmt.Println("Error starting Broker:", err)
 		return
+	}
+
+	// initialise server addresses
+	servers = make([]string, 4)
+	for i := 0; i < 4; i++ {
+		servers[i] = "127.0.0.1:" + strconv.Itoa(8050+i)
 	}
 
 	// Initialise closeBrokerChan and stopTurnsChan

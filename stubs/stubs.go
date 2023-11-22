@@ -60,10 +60,17 @@ type RestartResponse struct {
 }
 
 type NextStateRequest struct {
-	Height int
-	Width  int
-	World  [][]byte
-	// Slice [][]byte // for when it is only operating on a slice, World will be for comparing (as in parallel implementation)
+	// Height     int
+	// Width      int
+	// WholeWorld [][]byte
+	// WorldSlice [][]byte // for when it is only operating on a slice, World will be for comparing (as in parallel implementation)
+	StartY      int
+	EndY        int
+	StartX      int
+	EndX        int
+	WorldHeight int
+	WorldWidth  int
+	World       [][]byte
 }
 
 type NextStateResponse struct {
