@@ -108,7 +108,7 @@ func (g *Broker) Screenshot(req stubs.ScreenshotRequest, res *stubs.ScreenshotRe
 }
 
 func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error) {
-	close(stopTurnsChan) // signal that the client wants to quit
+	stopTurnsChan <- struct{}{} // signal that the client wants to quit
 
 	turnExecutionFinished.Wait() // wait for last turn to be completed
 
@@ -124,8 +124,6 @@ func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error
 
 	mutex.Unlock()
 
-	// open new channel to listen for quit requests
-	stopTurnsChan = make(chan struct{})
 	return
 }
 
