@@ -42,7 +42,6 @@ func countNonZeroValues(arr []int) int {
 }
 
 func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStateResponse) (err error) {
-	// threads := req.Threads
 
 	// split heights as evenly as possible
 	heights := calcHeights(req.EndY-req.StartY, req.Threads)
@@ -65,7 +64,7 @@ func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStat
 		start += heights[i]
 	}
 
-	// store next state here
+	// declare variable to store new world
 	var newWorld [][]byte
 
 	// reassemble world
@@ -155,5 +154,4 @@ func main() {
 
 	<-closeServerChan
 	fmt.Println("Server shutdown complete")
-
 }

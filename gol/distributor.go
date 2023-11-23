@@ -82,6 +82,7 @@ func makeRestartCall(client *rpc.Client, resultChan chan<- stubs.RestartResponse
 func distributor(p Params, c distributorChannels) {
 	broker := "127.0.0.1:8030"
 	fmt.Println("Broker: ", broker)
+
 	// dial Broker address that has been passed
 	client, err := rpc.Dial("tcp", broker)
 	if err != nil {
@@ -89,6 +90,7 @@ func distributor(p Params, c distributorChannels) {
 	}
 	defer client.Close()
 
+	// read in image
 	filename := fmt.Sprintf("%vx%v", p.ImageWidth, p.ImageHeight)
 	c.ioCommand <- ioInput
 	c.ioFilename <- filename
@@ -99,6 +101,7 @@ func distributor(p Params, c distributorChannels) {
 		world[i] = make([]byte, p.ImageWidth)
 	}
 
+	// send initial CellFlipped events
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageWidth; x++ {
 			world[y][x] = <-c.ioInput
@@ -111,6 +114,7 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
+	// start ticker
 	ticker := time.NewTicker(2 * time.Second)
 
 	wg.Add(1)
@@ -132,11 +136,10 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	paused := false       // stores whether execution has been paused
-	finalTurns := p.Turns // number of turns completed when program exits
+	paused := false // stores whether execution has been paused
+	// finalTurns := p.Turns // number of turns completed when program exits
 
 	go func() {
-		// keysLoop:
 		for {
 			select {
 			case key := <-c.keyPresses:
@@ -148,13 +151,13 @@ func distributor(p Params, c distributorChannels) {
 				case 'q':
 					quitResultChannel := make(chan stubs.QuitResponse)
 					go makeQuitCall(client, quitResultChannel)
-					finalTurns = (<-quitResultChannel).Turn
+					<-quitResultChannel
 					return
 				case 'k':
 					// send quit request
 					quitResultChannel := make(chan stubs.QuitResponse)
 					go makeQuitCall(client, quitResultChannel)
-					finalTurns = (<-quitResultChannel).Turn
+					<-quitResultChannel
 
 					// wait for world to be read from Broker
 					wg.Wait()
@@ -180,9 +183,14 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	// get final world from Broker
-	finalWorld := (<-runGameResultChannel).World
+	// get game result from broker
+	runGameResult := <-runGameResultChannel
 	ticker.Stop()
+
+	// get final world and turns completed
+	finalWorld := runGameResult.World
+	finalCompletedTurns := runGameResult.CompletedTurns
+	finalAliveCells := runGameResult.AliveCells
 
 	// generate pgm image of final world state
 	generatePGM(p, c, finalWorld)
@@ -190,30 +198,16 @@ func distributor(p Params, c distributorChannels) {
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
-	c.events <- StateChange{finalTurns, Quitting}
+	c.events <- StateChange{finalCompletedTurns, Quitting}
 
 	// Report the final state using FinalTurnCompleteEvent.
-	alive := calculateAliveCells(p, finalWorld)
 	c.events <- FinalTurnComplete{
-		CompletedTurns: finalTurns,
-		Alive:          alive,
+		CompletedTurns: finalCompletedTurns,
+		Alive:          finalAliveCells,
 	}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
-}
-
-// ? should this be calculated in the Broker (does this count as GOL logic???)
-func calculateAliveCells(p Params, world [][]byte) []util.Cell {
-	aliveCells := make([]util.Cell, 0, p.ImageHeight*p.ImageWidth)
-	for rowI, row := range world {
-		for colI, cellVal := range row {
-			if cellVal == 255 {
-				aliveCells = append(aliveCells, util.Cell{X: colI, Y: rowI})
-			}
-		}
-	}
-	return aliveCells
 }
 
 func generatePGM(p Params, c distributorChannels, world [][]byte) {

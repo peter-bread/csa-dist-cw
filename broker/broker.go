@@ -33,6 +33,7 @@ func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateRespo
 		tempWorld[i] = make([]byte, width)
 	}
 	copy(tempWorld, world)
+
 	// copy these values while mutex is locked to prevent any race conditions
 	h := height
 	w := width
@@ -110,24 +111,31 @@ func (g *Broker) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (
 
 	// set global variables
 	mutex.Lock()
-	world = req.World
-	height = req.Height // should only change after Quit has been called and a new world is passed in to RunGame
-	width = req.Width   // should only change after Quit has been called and a new world is passed in to RunGame
-	threads = req.Threads
+	world = req.World     // changes after every turn
+	height = req.Height   // should only change after Quit has been called and a new world is passed in to RunGame
+	width = req.Width     // should only change after Quit has been called and a new world is passed in to RunGame
+	threads = req.Threads // should only change after Quit has been called and a new world is passed in to RunGame
 	mutex.Unlock()
 
 	resultChan := make(chan [][]byte)
 	turnExecutionFinished.Add(1)
+
 	go RunTurns(req.Turns, resultChan)
 	res.World = <-resultChan
+
+	mutex.Lock()
+	res.CompletedTurns = turn
+	res.AliveCells = calculateAliveCells()
+	mutex.Unlock()
+
 	return
 }
 
 func (g *Broker) AliveCellsCount(req stubs.AliveCellsCountRequest, res *stubs.AliveCellsCountResponse) (err error) {
 	mutex.Lock()
 	res.CompletedTurns = turn
-	mutex.Unlock()
 	res.CellsCount = len(calculateAliveCells())
+	mutex.Unlock()
 	return
 }
 
@@ -149,15 +157,11 @@ func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error
 	turnExecutionFinished.Wait() // wait for last turn to be completed
 
 	mutex.Lock()
-
-	res.Turn = turn
-
 	// reset state
 	turn = 0
 	height = 0
 	width = 0
 	world = nil
-
 	mutex.Unlock()
 
 	return
@@ -204,8 +208,8 @@ func (g *Broker) Pause(req stubs.PauseRequest, res *stubs.PauseResponse) (err er
 }
 
 func (g *Broker) Restart(req stubs.PauseRequest, res *stubs.PauseResponse) (err error) {
-	mutex.Unlock()
 	res.Turn = turn
+	mutex.Unlock()
 	return
 }
 
@@ -247,8 +251,6 @@ func main() {
 }
 
 func calculateAliveCells() []util.Cell {
-	mutex.Lock()
-	defer mutex.Unlock()
 	aliveCells := make([]util.Cell, 0, height*width)
 	for rowI, row := range world {
 		for colI, cellVal := range row {

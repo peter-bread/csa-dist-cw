@@ -1,5 +1,7 @@
 package stubs
 
+import "uk.ac.bris.cs/gameoflife/util"
+
 var (
 	RunGame         = "Broker.RunGame"
 	AliveCellsCount = "Broker.AliveCellsCount"
@@ -21,8 +23,9 @@ type RunGameRequest struct {
 }
 
 type RunGameResponse struct {
-	World [][]byte
-	Turn  int
+	World          [][]byte
+	CompletedTurns int
+	AliveCells     []util.Cell
 }
 
 type AliveCellsCountRequest struct{}
@@ -40,9 +43,7 @@ type ScreenshotResponse struct {
 
 type QuitRequest struct{}
 
-type QuitResponse struct {
-	Turn int
-}
+type QuitResponse struct{}
 
 type CloseBrokerRequest struct{}
 
@@ -61,10 +62,6 @@ type RestartResponse struct {
 }
 
 type NextStateRequest struct {
-	// Height     int
-	// Width      int
-	// WholeWorld [][]byte
-	// WorldSlice [][]byte // for when it is only operating on a slice, World will be for comparing (as in parallel implementation)
 	StartY      int
 	EndY        int
 	StartX      int
