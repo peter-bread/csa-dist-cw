@@ -29,24 +29,38 @@ func calcHeights(imageHeight, threads int) []int {
 	return heights
 }
 
-func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStateResponse) (err error) {
-	threads := req.Threads
-
-	// initialise worker channels
-	workers := make([]chan [][]byte, threads)
-	for i := 0; i < threads; i++ {
-		workers[i] = make(chan [][]byte)
+func countNonZeroValues(arr []int) int {
+	count := 0
+	for _, value := range arr {
+		if value != 0 {
+			count++
+		} else {
+			break
+		}
 	}
+	return count
+}
+
+func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStateResponse) (err error) {
+	// threads := req.Threads
 
 	// split heights as evenly as possible
-	heights := calcHeights(req.EndY-req.StartY, threads)
+	heights := calcHeights(req.EndY-req.StartY, req.Threads)
+
+	// number of useful usefulThreads (if the height is 0, the worker is operating on an empty slice and will return an empty slice)
+	// this avoids the slight performance overhead of starting a bunch of useless goroutines
+	usefulThreads := countNonZeroValues(heights)
+
+	// initialise worker channels
+	workers := make([]chan [][]byte, usefulThreads)
+	for i := 0; i < usefulThreads; i++ {
+		workers[i] = make(chan [][]byte)
+	}
 
 	start := req.StartY
 
 	// start workers
-	for i := 0; i < threads; i++ {
-		// TODO don't start worker if heights[i] == 0. This is not massively important as it just starts workers that return empty slices immediately but its probably better if it doesnt do that
-		// TODO will need to change threads to the how many non-zero heights there are
+	for i := 0; i < usefulThreads; i++ {
 		go worker(start, start+heights[i], req.StartX, req.EndX, req.WorldHeight, req.WorldWidth, req.World, workers[i])
 		start += heights[i]
 	}
@@ -55,7 +69,7 @@ func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStat
 	var newWorld [][]byte
 
 	// reassemble world
-	for i := 0; i < threads; i++ {
+	for i := 0; i < usefulThreads; i++ {
 		newWorld = append(newWorld, <-workers[i]...)
 	}
 	res.World = newWorld
