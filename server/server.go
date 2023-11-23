@@ -45,6 +45,8 @@ func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStat
 
 	// start workers
 	for i := 0; i < threads; i++ {
+		// TODO don't start worker if heights[i] == 0. This is not massively important as it just starts workers that return empty slices immediately but its probably better if it doesnt do that
+		// TODO will need to change threads to the how many non-zero heights there are
 		go worker(req.StartY, req.StartY+heights[i], req.StartX, req.EndX, req.WorldHeight, req.WorldWidth, req.World, workers[i])
 		start += heights[i]
 	}
@@ -94,7 +96,7 @@ func calculateNextState(startY, endY, startX, endX, world_height, world_width in
 						// Check if the wrapped neighbour is alive
 						if world[neighbourRow][neighbourCol] == 255 {
 							aliveNeighbours++
-							fmt.Printf("r=%d c=%d\n", neighbourRow, neighbourCol)
+							// fmt.Printf("r=%d c=%d\n", neighbourRow, neighbourCol)
 						}
 					}
 				}
@@ -108,7 +110,10 @@ func calculateNextState(startY, endY, startX, endX, world_height, world_width in
 			} else if cellVal == 0 && aliveNeighbours == 3 { // new cell is born
 				newWorld[rowI][colI] = 255
 			} else { // cell remains as it is
-				newWorld[rowI][colI] = world[rowI+startY][colI+startX] // FIXME the indexes rowI+startY & colI+startX are wrong
+				// FIXME the indexes rowI+startY & colI+startX are wrong
+				// FIXME rowI+startY only = 0,1,4,5,8,9,12,13. it is missing 2,3,6,7,10,11,14,15
+				newWorld[rowI][colI] = world[rowI+startY][colI+startX]
+				fmt.Printf("y=%d x=%d\n", rowI+startY, colI+startX)
 			}
 		}
 	}
