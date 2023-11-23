@@ -17,6 +17,7 @@ var (
 	height                int
 	width                 int
 	turn                  int
+	threads               int
 	mutex                 sync.Mutex
 	closeBrokerChan       chan struct{}
 	stopTurnsChan         chan struct{}
@@ -32,8 +33,10 @@ func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateRespo
 		tempWorld[i] = make([]byte, width)
 	}
 	copy(tempWorld, world)
+	// copy these values while mutex is locked to prevent any race conditions
 	h := height
 	w := width
+	t := threads
 	mutex.Unlock()
 
 	sliceHeight := h / 4 // this should always divide nicely (since we are hardcoding 4 servers and all given input files are divisible by 4)
@@ -46,7 +49,9 @@ func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateRespo
 		EndX:        w,
 		StartY:      sliceHeight * i,
 		EndY:        sliceHeight * (i + 1),
+		Threads:     t,
 	}
+
 	res := new(stubs.NextStateResponse)
 	client.Call(stubs.NextState, req, res)
 	resultChan <- *res
@@ -108,6 +113,7 @@ func (g *Broker) RunGame(req stubs.RunGameRequest, res *stubs.RunGameResponse) (
 	world = req.World
 	height = req.Height // should only change after Quit has been called and a new world is passed in to RunGame
 	width = req.Width   // should only change after Quit has been called and a new world is passed in to RunGame
+	threads = req.Threads
 	mutex.Unlock()
 
 	resultChan := make(chan [][]byte)

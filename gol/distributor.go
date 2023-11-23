@@ -27,10 +27,11 @@ var wg sync.WaitGroup
 func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- stubs.RunGameResponse) {
 	defer wg.Done()
 	req := stubs.RunGameRequest{
-		Turns:  p.Turns,
-		Height: p.ImageHeight,
-		Width:  p.ImageWidth,
-		World:  world,
+		Turns:   p.Turns,
+		Height:  p.ImageHeight,
+		Width:   p.ImageWidth,
+		Threads: p.Threads,
+		World:   world,
 	}
 	res := new(stubs.RunGameResponse)
 	client.Call(stubs.RunGame, req, res)

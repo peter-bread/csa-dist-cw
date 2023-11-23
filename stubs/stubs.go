@@ -13,10 +13,11 @@ var (
 )
 
 type RunGameRequest struct {
-	Turns  int
-	Height int
-	Width  int
-	World  [][]byte
+	Turns   int
+	Height  int
+	Width   int
+	Threads int
+	World   [][]byte
 }
 
 type RunGameResponse struct {
@@ -70,6 +71,7 @@ type NextStateRequest struct {
 	EndX        int
 	WorldHeight int
 	WorldWidth  int
+	Threads     int
 	World       [][]byte
 }
 
