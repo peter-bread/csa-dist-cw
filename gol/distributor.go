@@ -24,6 +24,8 @@ type distributorChannels struct {
 
 var wg sync.WaitGroup
 
+// TODO define makeReadyToDialCall to tell broker it is safe to dial the client
+
 func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- stubs.RunGameResponse) {
 	defer wg.Done()
 	req := stubs.RunGameRequest{
@@ -89,6 +91,9 @@ func distributor(p Params, c distributorChannels) {
 		log.Fatal("dialing:", err)
 	}
 	defer client.Close()
+
+	// TODO send request to broker to say broker can dial the client
+	// TODO wait for response to say the broker has dialled client suiccessfully (2-way comms is now available)
 
 	// read in image
 	filename := fmt.Sprintf("%vx%v", p.ImageWidth, p.ImageHeight)

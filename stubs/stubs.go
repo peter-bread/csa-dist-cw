@@ -14,6 +14,9 @@ var (
 	CloseServer     = "Server.CloseServer"
 )
 
+// TODO define SendWorldState request/response
+// TODO define ReadyToDial request/response
+
 type RunGameRequest struct {
 	Turns   int
 	Height  int

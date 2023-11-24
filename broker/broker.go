@@ -58,6 +58,9 @@ func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateRespo
 	resultChan <- *res
 }
 
+// TODO define makeSendWorldStateCall to send the world state from the broker to the client
+// * probably won't need to listen for responses
+
 func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 	defer turnExecutionFinished.Done()
 	turn = 0
@@ -93,6 +96,8 @@ TurnsLoop:
 			for i := 0; i < 4; i++ {
 				newWorld = append(newWorld, (<-nextStateResultChannels[i]).World...)
 			}
+
+			// TODO make call to client to send world state
 
 			mutex.Lock()
 			copy(world, newWorld)
@@ -171,7 +176,7 @@ func (g *Broker) CloseBroker(req stubs.CloseBrokerRequest, res *stubs.CloseBroke
 	close(stopTurnsChan) // close channel (even though that doesn't trigger anything, just cleaning up)
 
 	// close servers
-	// ? if these requests/responses ever become stateful then will need to make a new req/res pair for each CloseServer call
+	// ! if these requests/responses ever become stateful then will need to make a new req/res pair for each CloseServer call
 	closeServerReq := stubs.CloseServerRequest{}
 	closeServerRes := new(stubs.CloseServerResponse)
 	err = makeCloseServerCall(closeServerReq, closeServerRes)
