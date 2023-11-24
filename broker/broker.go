@@ -23,9 +23,10 @@ var (
 	stopTurnsChan         chan struct{}
 	turnExecutionFinished sync.WaitGroup
 	servers               []string
+	distClient            *rpc.Client
 )
 
-func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateResponse, i int) {
+func makeNextStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateResponse, i int) {
 	mutex.Lock()
 	// store copy of the world to send to server
 	tempWorld := make([][]byte, height)
@@ -58,8 +59,30 @@ func makeNewStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateRespo
 	resultChan <- *res
 }
 
-// TODO define makeSendWorldStateCall to send the world state from the broker to the client
-// * probably won't need to listen for responses
+func makeSendWorldStateCall(world [][]byte, cellsFlipped []util.Cell, completedTurns, cellsCount int) {
+	req := stubs.SendWorldStateRequest{
+		World:          world,
+		CellsFlipped:   cellsFlipped,
+		CompletedTurns: completedTurns,
+		CellsCount:     cellsCount,
+	}
+	res := new(stubs.SendWorldStateResponse)
+	distClient.Call(stubs.SendWorldState, req, res)
+}
+
+// define ReadyToDial that tells the broker it is safe to dial the distributor
+func (g *Broker) ReadyToDial(req stubs.ReadyToDialRequest, res *stubs.ReadyToDialResponse) (err error) {
+	// dial distributor
+	fmt.Println(req.S)
+	distributor := "127.0.0.1:8020"
+	client, err := rpc.Dial("tcp", distributor)
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
+	res.S = "broker is connected to controller"
+	distClient = client
+	return
+}
 
 func RunTurns(turns int, resultChan chan<- [][]byte) (err error) {
 	defer turnExecutionFinished.Done()
@@ -87,7 +110,7 @@ TurnsLoop:
 			// dial servers make rpc calls
 			for i := 0; i < 4; i++ {
 				nextStateResultChannels[i] = make(chan stubs.NextStateResponse)
-				go makeNewStateCall(clients[i], nextStateResultChannels[i], i)
+				go makeNextStateCall(clients[i], nextStateResultChannels[i], i)
 			}
 
 			var newWorld [][]byte
@@ -99,8 +122,20 @@ TurnsLoop:
 
 			// TODO make call to client to send world state
 
+			// get world data
 			mutex.Lock()
+
+			// copy of current world world
+			oldWorld := make([][]byte, height)
+			for i := 0; i < height; i++ {
+				oldWorld[i] = make([]byte, width)
+			}
+			copy(oldWorld, world)
+
 			copy(world, newWorld)
+			cellsCount := len(calculateAliveCells())
+			cellsFlipped := calculateFlippedCells(oldWorld, world)
+			makeSendWorldStateCall(newWorld, cellsFlipped, turn+1, cellsCount)
 			mutex.Unlock()
 		}
 	}
@@ -167,6 +202,7 @@ func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error
 	height = 0
 	width = 0
 	world = nil
+	// TODO reset distClient ???
 	mutex.Unlock()
 
 	return
@@ -265,4 +301,16 @@ func calculateAliveCells() []util.Cell {
 		}
 	}
 	return aliveCells
+}
+
+func calculateFlippedCells(oldWorld, newWorld [][]byte) []util.Cell {
+	cells := make([]util.Cell, 0, height*width)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			if oldWorld[y][x] != newWorld[y][x] {
+				cells = append(cells, util.Cell{X: x, Y: y})
+			}
+		}
+	}
+	return cells
 }

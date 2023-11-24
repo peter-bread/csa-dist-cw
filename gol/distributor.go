@@ -2,6 +2,7 @@ package gol
 
 import (
 	"log"
+	"net"
 	"net/rpc"
 	"sync"
 	"time"
@@ -22,9 +23,28 @@ type distributorChannels struct {
 	keyPresses <-chan rune
 }
 
-var wg sync.WaitGroup
+var (
+	wg             sync.WaitGroup
+	worldStateChan chan stubs.SendWorldStateRequest
+)
 
-// TODO define makeReadyToDialCall to tell broker it is safe to dial the client
+type Controller struct{}
+
+func (c *Controller) SendWorldState(req stubs.SendWorldStateRequest, res *stubs.SendWorldStateResponse) (err error) {
+	wg.Add(1)
+	defer wg.Done() // the last one of these must finsih processing before the client can be shut down
+	worldStateChan <- req
+	return
+}
+
+// define makeReadyToDialCall to tell broker it is safe to dial the client
+func makeReadyToDialCall(client *rpc.Client, resultChan chan<- stubs.ReadyToDialResponse) {
+	req := stubs.ReadyToDialRequest{S: "controller is connected to broker"}
+	res := new(stubs.ReadyToDialResponse)
+	client.Call(stubs.ReadyToDial, req, res)
+	fmt.Println(res.S)
+	resultChan <- *res
+}
 
 func makeRunGameCall(client *rpc.Client, world [][]byte, p Params, resultChan chan<- stubs.RunGameResponse) {
 	defer wg.Done()
@@ -92,8 +112,34 @@ func distributor(p Params, c distributorChannels) {
 	}
 	defer client.Close()
 
-	// TODO send request to broker to say broker can dial the client
-	// TODO wait for response to say the broker has dialled client suiccessfully (2-way comms is now available)
+	rpc.Register(&Controller{})
+
+	pAddr := "8020"
+
+	listener, err := net.Listen("tcp", ":"+pAddr)
+	if err != nil {
+		fmt.Println("Error starting Controller:", err)
+		return
+	}
+
+	worldStateChan = make(chan stubs.SendWorldStateRequest, 1000000)
+
+	// start listening to broker on 8020
+	go func() {
+		defer listener.Close()
+
+		fmt.Println("Controller listening on", listener.Addr())
+
+		// Accept connections and serve them
+		rpc.Accept(listener)
+	}()
+
+	// send request to broker to say broker can dial the client
+	readyToDialResultChannel := make(chan stubs.ReadyToDialResponse)
+	go makeReadyToDialCall(client, readyToDialResultChannel)
+
+	// wait for response to say the broker has dialled client successfully (2-way comms is now available)
+	<-readyToDialResultChannel
 
 	// read in image
 	filename := fmt.Sprintf("%vx%v", p.ImageWidth, p.ImageHeight)
@@ -118,6 +164,35 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}
 	}
+
+	stopListening := make(chan struct{})
+
+	// receive world state updates after every turn and send the data down the events channel
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case s := <-worldStateChan:
+
+				// send CellFlipped events
+				for _, cell := range s.CellsFlipped {
+					c.events <- CellFlipped{
+						CompletedTurns: s.CompletedTurns,
+						Cell:           cell,
+					}
+				}
+
+				// send TurnComplete event
+				c.events <- TurnComplete{
+					CompletedTurns: s.CompletedTurns,
+				}
+
+			case <-stopListening:
+				return
+			}
+		}
+	}()
 
 	// start ticker
 	ticker := time.NewTicker(2 * time.Second)
@@ -191,6 +266,9 @@ func distributor(p Params, c distributorChannels) {
 	// get game result from broker
 	runGameResult := <-runGameResultChannel
 	ticker.Stop()
+
+	// stop receiving world updates
+	close(stopListening)
 
 	// get final world and turns completed
 	finalWorld := runGameResult.World

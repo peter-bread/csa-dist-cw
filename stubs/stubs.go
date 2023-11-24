@@ -3,6 +3,7 @@ package stubs
 import "uk.ac.bris.cs/gameoflife/util"
 
 var (
+	ReadyToDial     = "Broker.ReadyToDial"
 	RunGame         = "Broker.RunGame"
 	AliveCellsCount = "Broker.AliveCellsCount"
 	Screenshot      = "Broker.Screenshot"
@@ -12,10 +13,25 @@ var (
 	Restart         = "Broker.Restart"
 	NextState       = "Server.ReturnNextState"
 	CloseServer     = "Server.CloseServer"
+	SendWorldState  = "Controller.SendWorldState"
 )
 
-// TODO define SendWorldState request/response
-// TODO define ReadyToDial request/response
+type ReadyToDialRequest struct {
+	S string
+}
+
+type ReadyToDialResponse struct {
+	S string
+}
+
+type SendWorldStateRequest struct {
+	World          [][]byte
+	CellsFlipped   []util.Cell
+	CompletedTurns int
+	CellsCount     int
+}
+
+type SendWorldStateResponse struct{}
 
 type RunGameRequest struct {
 	Turns   int
@@ -27,8 +43,8 @@ type RunGameRequest struct {
 
 type RunGameResponse struct {
 	World          [][]byte
-	CompletedTurns int
 	AliveCells     []util.Cell
+	CompletedTurns int
 }
 
 type AliveCellsCountRequest struct{}
