@@ -25,7 +25,6 @@ type ReadyToDialResponse struct {
 }
 
 type SendWorldStateRequest struct {
-	World          [][]byte
 	CellsFlipped   []util.Cell
 	CompletedTurns int
 	CellsCount     int

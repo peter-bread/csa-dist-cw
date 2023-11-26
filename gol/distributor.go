@@ -188,6 +188,7 @@ func distributor(p Params, c distributorChannels) {
 					CompletedTurns: s.CompletedTurns,
 				}
 
+			// goroutine needs to receive signal from channel to stop executing
 			case <-stopListening:
 				return
 			}

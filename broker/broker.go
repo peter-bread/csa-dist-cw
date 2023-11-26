@@ -61,7 +61,6 @@ func makeNextStateCall(client *rpc.Client, resultChan chan<- stubs.NextStateResp
 
 func makeSendWorldStateCall(world [][]byte, cellsFlipped []util.Cell, completedTurns, cellsCount int) {
 	req := stubs.SendWorldStateRequest{
-		World:          world,
 		CellsFlipped:   cellsFlipped,
 		CompletedTurns: completedTurns,
 		CellsCount:     cellsCount,
