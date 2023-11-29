@@ -73,7 +73,8 @@ func makeSendWorldStateCall(world [][]byte, cellsFlipped []util.Cell, completedT
 func (g *Broker) ReadyToDial(req stubs.ReadyToDialRequest, res *stubs.ReadyToDialResponse) (err error) {
 	// dial distributor
 	fmt.Println(req.S)
-	distributor := "127.0.0.1:8020"
+	distributor := "127.0.0.1:" + req.Port
+	fmt.Println(distributor)
 	client, err := rpc.Dial("tcp", distributor)
 	if err != nil {
 		log.Fatal("dialing:", err)
@@ -118,8 +119,6 @@ TurnsLoop:
 			for i := 0; i < 4; i++ {
 				newWorld = append(newWorld, (<-nextStateResultChannels[i]).World...)
 			}
-
-			// TODO make call to client to send world state
 
 			// get world data
 			mutex.Lock()
@@ -201,8 +200,10 @@ func (g *Broker) Quit(req stubs.QuitRequest, res *stubs.QuitResponse) (err error
 	height = 0
 	width = 0
 	world = nil
-	// TODO reset distClient ???
+	// ? reset distClient
 	mutex.Unlock()
+
+	fmt.Println("Client quit")
 
 	return
 }
@@ -265,7 +266,7 @@ func main() {
 		return
 	}
 
-	// initialise server addresses
+	// Initialise server addresses (only set up like this for running everything on local machine)
 	servers = make([]string, 4)
 	for i := 0; i < 4; i++ {
 		servers[i] = "127.0.0.1:" + strconv.Itoa(8050+i)

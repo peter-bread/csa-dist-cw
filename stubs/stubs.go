@@ -17,7 +17,8 @@ var (
 )
 
 type ReadyToDialRequest struct {
-	S string
+	S    string
+	Port string
 }
 
 type ReadyToDialResponse struct {

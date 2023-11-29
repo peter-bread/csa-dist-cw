@@ -38,11 +38,14 @@ func (c *Controller) SendWorldState(req stubs.SendWorldStateRequest, res *stubs.
 }
 
 // define makeReadyToDialCall to tell broker it is safe to dial the client
-func makeReadyToDialCall(client *rpc.Client, resultChan chan<- stubs.ReadyToDialResponse) {
-	req := stubs.ReadyToDialRequest{S: "controller is connected to broker"}
+func makeReadyToDialCall(client *rpc.Client, portStr string, resultChan chan<- stubs.ReadyToDialResponse) {
+	req := stubs.ReadyToDialRequest{
+		S:    "controller is connected to broker",
+		Port: portStr,
+	}
 	res := new(stubs.ReadyToDialResponse)
 	client.Call(stubs.ReadyToDial, req, res)
-	fmt.Println(res.S)
+	// fmt.Println(res.S)
 	resultChan <- *res
 }
 
@@ -114,17 +117,22 @@ func distributor(p Params, c distributorChannels) {
 
 	rpc.Register(&Controller{})
 
-	pAddr := "8020"
-
-	listener, err := net.Listen("tcp", ":"+pAddr)
+	// listen on dynamically assigned port
+	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		fmt.Println("Error starting Controller:", err)
 		return
 	}
 
+	// get the dynamically assigned port number
+	_, portStr, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		fmt.Println("Error getting port:", err)
+	}
+
 	worldStateChan = make(chan stubs.SendWorldStateRequest, 1000000)
 
-	// start listening to broker on 8020
+	// start listening to broker on dynamically assigned port
 	go func() {
 		defer listener.Close()
 
@@ -134,9 +142,9 @@ func distributor(p Params, c distributorChannels) {
 		rpc.Accept(listener)
 	}()
 
-	// send request to broker to say broker can dial the client
+	// send request to broker to say broker can dial the client, passing in port number
 	readyToDialResultChannel := make(chan stubs.ReadyToDialResponse)
-	go makeReadyToDialCall(client, readyToDialResultChannel)
+	go makeReadyToDialCall(client, portStr, readyToDialResultChannel)
 
 	// wait for response to say the broker has dialled client successfully (2-way comms is now available)
 	<-readyToDialResultChannel
@@ -152,7 +160,7 @@ func distributor(p Params, c distributorChannels) {
 		world[i] = make([]byte, p.ImageWidth)
 	}
 
-	// send initial CellFlipped events
+	// send initial CellFlipped events for sdl
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageWidth; x++ {
 			world[y][x] = <-c.ioInput
@@ -174,6 +182,8 @@ func distributor(p Params, c distributorChannels) {
 		for {
 			select {
 			case s := <-worldStateChan:
+
+				// ! sending these events is slow and means there is a delay between pressing pause and the sdl pausing
 
 				// send CellFlipped events
 				for _, cell := range s.CellsFlipped {
@@ -218,8 +228,8 @@ func distributor(p Params, c distributorChannels) {
 	}()
 
 	paused := false // stores whether execution has been paused
-	// finalTurns := p.Turns // number of turns completed when program exits
 
+	// listen for keypresses
 	go func() {
 		for {
 			select {
@@ -295,8 +305,6 @@ func distributor(p Params, c distributorChannels) {
 }
 
 func generatePGM(p Params, c distributorChannels, world [][]byte) {
-	// after all turns send state of board to be outputted as a .pgm image
-
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
