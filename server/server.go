@@ -4,8 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/rpc"
+
 	"uk.ac.bris.cs/gameoflife/stubs"
-	"uk.ac.bris.cs/gameoflife/util"
 )
 
 var closeServerChan chan struct{}
@@ -38,7 +39,6 @@ func countNonZeroValues(arr []int) int {
 		}
 	}
 	return count
-
 }
 
 func (s *Server) ReturnNextState(req stubs.NextStateRequest, res *stubs.NextStateResponse) (err error) {
