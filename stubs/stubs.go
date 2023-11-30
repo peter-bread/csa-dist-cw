@@ -1,5 +1,4 @@
 package stubs
-
 import "uk.ac.bris.cs/gameoflife/util"
 
 var (

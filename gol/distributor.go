@@ -6,7 +6,6 @@ import (
 	"net/rpc"
 	"sync"
 	"time"
-
 	"uk.ac.bris.cs/gameoflife/stubs"
 	"uk.ac.bris.cs/gameoflife/util"
 
@@ -104,6 +103,19 @@ func makeRestartCall(client *rpc.Client, resultChan chan<- stubs.RestartResponse
 	resultChan <- *res
 }
 
+func makeTickerGo(client *rpc.Client, ticker *time.Ticker, world [][]byte, p Params) (int, int) {
+	request := stubs.TickerRequest{
+		TickerChan: ticker.C,
+		Height:     p.ImageHeight,
+		Width:      p.ImageWidth,
+		World:      world,
+	}
+	response := new(stubs.TickerResponse)
+	client.Call(stubs.ReturnAlive, request, response)
+
+	return response.CompletedTurns, response.CellsCount
+}
+
 func distributor(p Params, c distributorChannels) {
 	broker := "127.0.0.1:8030"
 	fmt.Println("Broker: ", broker)
@@ -172,6 +184,41 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}
 	}
+	finished := false
+	var finalWorld [][]byte
+	go func() {
+		finalWorld = makeCall(client, world, p)
+		finished = true
+	}()
+
+	ticker := time.NewTicker(2 * time.Second)
+
+	var completedTurns, cellCount int
+	go func() {
+		for {
+			if finished {
+				fmt.Println("wrong")
+				break
+			} else {
+				fmt.Print("hi")
+				completedTurns, cellCount = makeTickerGo(client, ticker, world, p)
+				fmt.Println("sending")
+				c.events <- AliveCellsCount{
+					CompletedTurns: completedTurns,
+					CellsCount:     cellCount,
+				}
+			}
+		}
+	}()
+
+	for {
+		if finished {
+			ticker.Stop()
+			alive := calculateAliveCells(p, finalWorld)
+			c.events <- FinalTurnComplete{
+				CompletedTurns: p.Turns,
+				Alive:          alive,
+			}
 
 	stopListening := make(chan struct{})
 
@@ -299,9 +346,10 @@ func distributor(p Params, c distributorChannels) {
 		CompletedTurns: finalCompletedTurns,
 		Alive:          finalAliveCells,
 	}
-
+      
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
+
 }
 
 func generatePGM(p Params, c distributorChannels, world [][]byte) {
